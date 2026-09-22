@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    // --- Output layout ---
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // --- Module system: CommonJS, so ts-node and Express interop work out of the box ---
+    "module": "node16",
+    "moduleResolution": "node16",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // --- Type safety (Lab 1 requires strict typing, no implicit any) ---
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // --- Build ergonomics ---
+    "sourceMap": true,
+    "declaration": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
