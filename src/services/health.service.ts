@@ -5,11 +5,14 @@ import type { HealthStatus } from '../types/health.ts';
 const SERVICE_NAME = 'campushub-backend';
 
 /**
- * Builds the service health report. Async because later labs will extend this
- * with a MongoDB connectivity probe; keeping the signature stable now avoids
- * a breaking change to the controller.
+ * Builds the service health report.
+ *
+ * Synchronous on purpose: there is nothing to await yet. When a MongoDB
+ * connectivity probe is added, this becomes `Promise<HealthStatus>` and the
+ * controller awaits it — declaring it async now would be a lie the linter
+ * rightly rejects.
  */
-export async function getHealthStatus(): Promise<HealthStatus> {
+export function getHealthStatus(): HealthStatus {
   return {
     status: 'ok',
     service: SERVICE_NAME,

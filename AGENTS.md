@@ -26,15 +26,15 @@ institutions share one deployment; every tenant's data must stay isolated.
 The packages below are **pre-approved**: install them when a task genuinely
 needs them. Anything not in this table requires approval first.
 
-| Purpose  | Package                                  |
-| -------- | ---------------------------------------- |
-| Language | TypeScript (strict mode)                 |
-| Runtime  | Node.js >= 24.21.0                       |
-| HTTP     | `express`                                |
-| Database | `mongoose` (MongoDB)                     |
-| Config   | `dotenv`                                 |
-| Types    | `@types/node`, `@types/express`          |
-| Tooling  | `typescript`, `ts-node`, `eslint`, `prettier` |
+| Purpose  | Package                                                                                            |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| Language | TypeScript (strict mode)                                                                           |
+| Runtime  | Node.js >= 24.21.0                                                                                 |
+| HTTP     | `express`                                                                                          |
+| Database | `mongoose` (MongoDB)                                                                               |
+| Config   | `dotenv`                                                                                           |
+| Types    | `@types/node`, `@types/express`                                                                    |
+| Tooling  | `typescript` (6.x), `ts-node`, `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier` |
 
 ### Forbidden
 
@@ -42,7 +42,7 @@ needs them. Anything not in this table requires approval first.
   `.ts`. Compiled JavaScript belongs in `dist/` and is never committed or
   hand-edited. (Root-level tooling config such as `eslint.config.mjs` is the
   only exception, and only when the tool cannot consume TypeScript.)
-- **No new dependency without explicit approval** — runtime *or* dev. Do not
+- **No new dependency without explicit approval** — runtime _or_ dev. Do not
   add a package to `package.json` on your own initiative. Propose it, state
   what it replaces, and wait for an answer. This includes "obvious" ones
   (lodash, axios, moment, nodemon, zod, jest).
@@ -55,10 +55,14 @@ needs them. Anything not in this table requires approval first.
 
 ### Runtime notes
 
-`ts-node@10` is incompatible with TypeScript 7 (it crashes in
-`configuration.js` reading `ts.sys.fileExists`). It stays in `devDependencies`
-because the course requires it, but **do not use it in npm scripts**. Node runs
-`.ts` directly via native type stripping:
+**TypeScript is pinned to 6.x on purpose.** `typescript-eslint` declares a peer
+range of `>=4.8.4 <6.1.0`, so TypeScript 7 makes the lint tooling uninstallable.
+Enforced rules are worth more than the newest compiler; do not bump TypeScript
+past 6.x until `typescript-eslint` supports it.
+
+Scripts run sources through Node's native TypeScript support rather than
+`ts-node`. Both work on TypeScript 6, but `node --watch` gives reload without a
+loader flag or an extra dependency:
 
 ```jsonc
 "dev":   "node --watch src/server.ts",
@@ -234,7 +238,13 @@ defeating their purpose. All are forbidden:
 
 ## 6. Definition of Done
 
-Before reporting a task complete, verify **all** of the following:
+Run `npm run typecheck && npm run lint && npm run format:check` first. Most of
+the rules above are machine-enforced by `eslint.config.mjs`, which cites the
+section it implements next to each rule — a passing lint run is evidence, not a
+substitute for reading this file. Suppressing a rule to make the run pass is
+itself a violation (§4, No escape hatches).
+
+Then verify **all** of the following:
 
 1. `npx tsc --noEmit` passes with zero errors.
 2. No `any` (or its aliases), no suppression comments, no `.js` files added

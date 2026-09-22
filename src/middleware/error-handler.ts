@@ -24,7 +24,8 @@ export function errorHandler(
   res: Response<ErrorResponse>,
   _next: NextFunction,
 ): void {
-  const detail: string = error instanceof Error ? error.stack ?? error.message : String(error);
+  const detail: string =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error('[error]', detail);
 
   if (res.headersSent) {

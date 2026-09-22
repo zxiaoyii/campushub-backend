@@ -20,7 +20,9 @@ function parseNodeEnv(raw: string | undefined): NodeEnv {
     return 'development';
   }
   const candidate = raw.trim();
-  const match = NODE_ENVS.find((value: NodeEnv): boolean => value === candidate);
+  const match = NODE_ENVS.find(
+    (value: NodeEnv): boolean => value === candidate,
+  );
   if (match === undefined) {
     throw new Error(
       `Invalid NODE_ENV "${raw}". Expected one of: ${NODE_ENVS.join(', ')}.`,
