@@ -4,9 +4,13 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
-    // --- Module system: CommonJS, so ts-node and Express interop work out of the box ---
+    // --- Module system: native ESM, matching "type": "module" in package.json.
+    // Relative imports carry an explicit .ts extension so Node can run the
+    // sources directly; tsc rewrites them to .js on build. ---
     "module": "node16",
     "moduleResolution": "node16",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "target": "ES2023",
     "lib": ["ES2023"],
     "types": ["node"],

@@ -33,7 +33,8 @@ needs them. Anything not in this table requires approval first.
 | HTTP     | `express`                                |
 | Database | `mongoose` (MongoDB)                     |
 | Config   | `dotenv`                                 |
-| Tooling  | `typescript`, `ts-node`, `@types/node`, `eslint`, `prettier` |
+| Types    | `@types/node`, `@types/express`          |
+| Tooling  | `typescript`, `ts-node`, `eslint`, `prettier` |
 
 ### Forbidden
 
@@ -65,6 +66,14 @@ because the course requires it, but **do not use it in npm scripts**. Node runs
 "start": "node dist/server.js"
 ```
 
+The project is **ESM** (`"type": "module"`). Consequences, both mandatory:
+
+- Relative imports carry an explicit `.ts` extension (`./config/env.ts`).
+  Node needs it to resolve the file; `tsc` rewrites it to `.js` on build via
+  `rewriteRelativeImportExtensions`. Extensionless relative imports do not
+  compile.
+- Type-only imports use `import type { ... }`.
+
 ---
 
 ## 3. Architectural Boundaries
@@ -76,6 +85,10 @@ routes/ → controllers/ → services/ → models/
 ```
 
 A layer may only import from layers to its right. **Never** import in reverse.
+
+`config/` and `types/` are cross-cutting: any layer may import them, but they
+must not import from any business layer, so they stay free of domain logic.
+`middleware/` may be imported by `routes/` and `app.ts` only.
 
 ```
 src/
@@ -191,14 +204,17 @@ defeating their purpose. All are forbidden:
 
 ### General
 
-- No `console.log` in committed code beyond deliberate startup/shutdown
-  logging in `server.ts`.
+- No ad-hoc `console` logging in committed code. The only permitted call sites
+  are deliberate startup/shutdown logging in `server.ts` and the centralized
+  error-handling middleware, which must log the failure server-side before
+  responding. Never use `console` for debugging leftovers.
 - HTTP status codes must be accurate: `200` read, `201` create, `204` empty,
   `400` validation, `401` unauthenticated, `403` unauthorized, `404` missing,
   `409` conflict, `500` unexpected.
 - All routes are versioned under `/api/v1`.
-- Files use `kebab-case`; types/interfaces `PascalCase`; variables and
-  functions `camelCase`.
+- Files use `kebab-case`, with an optional layer suffix where it aids
+  navigation (`health.controller.ts`, `health.service.ts`, `error-handler.ts`).
+  Types/interfaces are `PascalCase`; variables and functions `camelCase`.
 - Do not create README files, docs, or example code unless asked.
 
 ---
