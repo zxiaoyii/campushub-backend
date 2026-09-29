@@ -227,7 +227,9 @@ defeating their purpose. All are forbidden:
 - Files use `kebab-case`, with an optional layer suffix where it aids
   navigation (`health.controller.ts`, `health.service.ts`, `error-handler.ts`).
   Types/interfaces are `PascalCase`; variables and functions `camelCase`.
-- Do not create README files, docs, or example code unless asked.
+- Do not create new docs or example code unless asked. `README.md` already
+  exists: when an endpoint, script or required Node version changes, update it
+  in the same commit rather than letting it drift.
 
 ---
 
