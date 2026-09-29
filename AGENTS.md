@@ -78,6 +78,14 @@ The project is **ESM** (`"type": "module"`). Consequences, both mandatory:
   compile.
 - Type-only imports use `import type { ... }`.
 
+Node **strips** types, it does not transform them, so TypeScript syntax that
+compiles to runtime code is unusable even though `tsc` accepts it. No
+constructor parameter properties (`constructor(public readonly x: string)`), no
+`enum`, no `namespace`, no decorators. Declare and assign fields explicitly,
+and use `as const` unions in place of enums. A violation only surfaces at
+runtime as `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, so type-checking alone will not
+catch it — run the server.
+
 ---
 
 ## 3. Architectural Boundaries
@@ -223,7 +231,30 @@ defeating their purpose. All are forbidden:
 
 ---
 
-## 5. Git & Commit Formatting
+## 5. API Contract
+
+`docs/openapi.yaml` is the authoritative description of every HTTP endpoint.
+
+- **The contract comes first.** To change a path, payload field, enum member or
+  status code, edit the contract, then the code. Never the other way round, and
+  never only one of them.
+- Route paths, request/response field names and status codes in the code must
+  match the contract exactly. An endpoint that is not in the contract does not
+  exist.
+- `src/types/reservation.ts` mirrors `components/schemas`. Keep the names
+  identical so a divergence is obvious on sight.
+- Request bodies are validated at the controller boundary against the schema,
+  including `additionalProperties: false` — an unexpected property is a 400,
+  not something to ignore.
+- Every error response body is the flat `ErrorResponse` shape
+  (`{ code, message }`) defined in the contract.
+- Validate the contract after editing it: `npx @redocly/cli lint
+docs/openapi.yaml`. The one accepted warning is the `localhost` server URL,
+  which the course requires.
+
+---
+
+## 6. Git & Commit Formatting
 
 - Commit messages follow Conventional Commits:
   `feat|fix|chore|refactor|docs|test(scope): summary`
@@ -236,7 +267,7 @@ defeating their purpose. All are forbidden:
 
 ---
 
-## 6. Definition of Done
+## 7. Definition of Done
 
 Run `npm run typecheck && npm run lint && npm run format:check` first. Most of
 the rules above are machine-enforced by `eslint.config.mjs`, which cites the
@@ -257,6 +288,10 @@ Then verify **all** of the following:
 8. Every async path has explicit error handling; no floating promises.
 9. Tenant-owned queries are scoped by `tenantId`.
 10. Any new env var is present in `.env-example`.
+11. Paths, fields and status codes match `docs/openapi.yaml`, and the contract
+    still lints.
+12. The server actually starts and the touched endpoints were called — type
+    checking does not catch unsupported runtime syntax (§2).
 
 If a rule was intentionally bent, say so explicitly in your response and
 explain why. Do not report success while a constraint is silently violated.
