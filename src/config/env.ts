@@ -9,9 +9,13 @@ export interface AppConfig {
   readonly nodeEnv: NodeEnv;
   readonly port: number;
   readonly apiPrefix: string;
+  readonly mongoUri: string;
+  readonly mongoTimeoutMs: number;
 }
 
 const DEFAULT_PORT = 3000;
+const DEFAULT_MONGO_URI = 'mongodb://127.0.0.1:27017/campushub';
+const DEFAULT_MONGO_TIMEOUT_MS = 5000;
 const API_PREFIX = '/api/v1';
 const NODE_ENVS: readonly NodeEnv[] = ['development', 'test', 'production'];
 
@@ -44,11 +48,26 @@ function parsePort(raw: string | undefined): number {
   return parsed;
 }
 
+function parseMongoUri(raw: string | undefined): string {
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_MONGO_URI;
+  }
+  const uri = raw.trim();
+  if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
+    throw new Error(
+      'Invalid MONGODB_URI. Expected it to start with mongodb:// or mongodb+srv://.',
+    );
+  }
+  return uri;
+}
+
 function loadConfig(): AppConfig {
   return {
     nodeEnv: parseNodeEnv(process.env['NODE_ENV']),
     port: parsePort(process.env['PORT']),
     apiPrefix: API_PREFIX,
+    mongoUri: parseMongoUri(process.env['MONGODB_URI']),
+    mongoTimeoutMs: DEFAULT_MONGO_TIMEOUT_MS,
   };
 }
 

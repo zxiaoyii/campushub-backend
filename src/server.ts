@@ -1,9 +1,10 @@
 import type { Server } from 'node:http';
 import process from 'node:process';
-import { createApp } from './app.ts';
+import { bootstrapApp } from './app.ts';
+import { disconnectDatabase } from './config/database.ts';
 import { appConfig } from './config/env.ts';
 
-const app = createApp();
+const app = await bootstrapApp();
 
 const server: Server = app.listen(appConfig.port, (): void => {
   console.log(
@@ -14,11 +15,16 @@ const server: Server = app.listen(appConfig.port, (): void => {
 function shutdown(signal: NodeJS.Signals): void {
   console.log(`[shutdown] received ${signal}, closing server`);
   server.close((error?: Error): void => {
-    if (error !== undefined) {
-      console.error('[shutdown] failed to close server cleanly', error.message);
-      process.exit(1);
-    }
-    process.exit(0);
+    disconnectDatabase()
+      .catch((disconnectError: unknown): void => {
+        console.error(
+          '[shutdown] failed to close the database',
+          disconnectError,
+        );
+      })
+      .finally((): void => {
+        process.exit(error === undefined ? 0 : 1);
+      });
   });
 }
 

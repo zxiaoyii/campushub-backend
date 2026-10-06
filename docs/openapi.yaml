@@ -102,7 +102,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 code: RESOURCE_NOT_FOUND
-                message: Resource "res-999" does not exist.
+                message: Resource "68e1f0a7c3b4d5e6f7a8b9ff" does not exist.
         '409':
           description: The resource is already reserved for an overlapping slot.
           content:
@@ -191,7 +191,7 @@ components:
           type: string
           minLength: 1
           description: Unique identifier of the resource.
-          example: res-101
+          example: 68e1f0a7c3b4d5e6f7a8b9c0
         name:
           type: string
           minLength: 1
@@ -221,8 +221,11 @@ components:
         resourceId:
           type: string
           minLength: 1
-          description: Identifier of the resource being booked.
-          example: res-101
+          description: |
+            Identifier of the resource being booked. Ids are MongoDB ObjectIds;
+            a value that is not a valid ObjectId is rejected with 400, while a
+            well-formed id that matches no resource gives 404.
+          example: 68e1f0a7c3b4d5e6f7a8b9c0
         userId:
           type: string
           minLength: 1
@@ -249,11 +252,11 @@ components:
           type: string
           minLength: 1
           description: Unique identifier, assigned by the server.
-          example: rsv-8f2c1a
+          example: 68e1f0a7c3b4d5e6f7a8b9c1
         resourceId:
           type: string
           minLength: 1
-          example: res-101
+          example: 68e1f0a7c3b4d5e6f7a8b9c0
         userId:
           type: string
           minLength: 1

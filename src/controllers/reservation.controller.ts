@@ -73,30 +73,30 @@ function parseReservationCreate(payload: unknown): ReservationCreate {
   };
 }
 
-export function handleCreateReservation(
+export async function handleCreateReservation(
   req: Request,
   res: Response<Reservation>,
   next: NextFunction,
-): void {
+): Promise<void> {
   try {
     const input: ReservationCreate = parseReservationCreate(req.body);
-    res.status(201).json(createReservation(input));
+    res.status(201).json(await createReservation(input));
   } catch (error: unknown) {
     next(error);
   }
 }
 
-export function handleListUserReservations(
+export async function handleListUserReservations(
   req: Request<{ userId: string }>,
   res: Response<Reservation[]>,
   next: NextFunction,
-): void {
+): Promise<void> {
   try {
     const { userId } = req.params;
     if (userId.trim() === '') {
       throw new ValidationError('userId must be a non-empty string.');
     }
-    res.status(200).json(listActiveReservationsForUser(userId));
+    res.status(200).json(await listActiveReservationsForUser(userId));
   } catch (error: unknown) {
     next(error);
   }

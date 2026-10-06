@@ -52,6 +52,9 @@ export interface ReservationCreate {
   readonly endTime: string;
 }
 
+/** A resource before it has been persisted and assigned an id. */
+export type ResourceInput = Omit<Resource, 'id'>;
+
 /** Query parameters accepted by GET /resources. */
 export interface ListResourcesQuery {
   readonly type?: string;

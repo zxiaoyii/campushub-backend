@@ -1,59 +1,68 @@
-import type { Resource } from '../types/reservation.ts';
+import { isValidObjectId, type QueryFilter, type Types } from 'mongoose';
+import { ResourceModel, type IResource } from '../models/Resource.model.ts';
+import {
+  RESOURCE_TYPES,
+  type Resource,
+  type ResourceInput,
+  type ResourceType,
+} from '../types/reservation.ts';
 
-/**
- * In-memory resource catalogue.
- *
- * Lab 2 is a contract-verification exercise and explicitly runs without a
- * database, so this module-level array stands in for the Mongoose model that
- * will replace it. Only this layer knows the data is in memory — the
- * controller above it is unaffected when persistence lands.
- */
-const RESOURCES: readonly Resource[] = [
-  {
-    id: 'res-101',
-    name: 'Study Room 302',
-    type: 'ROOM',
-    location: 'Snell Library, Floor 3',
-    isAvailable: true,
-  },
-  {
-    id: 'res-102',
-    name: 'Study Room 415',
-    type: 'ROOM',
-    location: 'Snell Library, Floor 4',
-    isAvailable: true,
-  },
-  {
-    id: 'res-201',
-    name: '3D Printer A',
-    type: 'EQUIPMENT',
-    location: 'Makerspace, Curry Student Center',
-    isAvailable: true,
-  },
-  {
-    id: 'res-301',
-    name: 'Robotics Lab',
-    type: 'LAB',
-    location: 'Richards Hall 210',
-    isAvailable: false,
-  },
-];
-
-/**
- * Lists resources, optionally narrowed by type. An unrecognised type is not an
- * error: it simply matches nothing, which is what the contract documents.
- */
-export function listResources(type?: string): Resource[] {
-  if (type === undefined) {
-    return [...RESOURCES];
-  }
-  return RESOURCES.filter(
-    (resource: Resource): boolean => resource.type === type,
-  );
+/** The persisted fields this layer reads back, independent of Mongoose's document wrappers. */
+interface ResourceRecord extends IResource {
+  _id: Types.ObjectId;
 }
 
-export function findResourceById(resourceId: string): Resource | undefined {
-  return RESOURCES.find(
-    (resource: Resource): boolean => resource.id === resourceId,
-  );
+function toResource(record: ResourceRecord): Resource {
+  return {
+    id: record._id.toString(),
+    name: record.name,
+    type: record.type,
+    location: record.location,
+    isAvailable: record.isAvailable,
+  };
+}
+
+function isResourceType(value: string): value is ResourceType {
+  return (RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * An unrecognised type matches nothing rather than failing, which is what the
+ * contract documents — so it never reaches the database.
+ */
+export async function listResources(type?: string): Promise<Resource[]> {
+  if (type !== undefined && !isResourceType(type)) {
+    return [];
+  }
+
+  const filter: QueryFilter<IResource> =
+    type === undefined ? {} : { type: type };
+
+  const documents = await ResourceModel.find(filter)
+    .sort({ name: 1 })
+    .lean<ResourceRecord[]>()
+    .exec();
+
+  return documents.map(toResource);
+}
+
+export async function findResourceById(
+  resourceId: string,
+): Promise<Resource | null> {
+  if (!isValidObjectId(resourceId)) {
+    return null;
+  }
+  const document = await ResourceModel.findById(resourceId)
+    .lean<ResourceRecord | null>()
+    .exec();
+  return document === null ? null : toResource(document);
+}
+
+/** Replaces the whole catalogue. Used by the seed script, not by the API. */
+export async function replaceResourceCatalogue(
+  resources: readonly ResourceInput[],
+): Promise<Resource[]> {
+  await ResourceModel.deleteMany({}).exec();
+  const created = await ResourceModel.insertMany(resources);
+  return created.map((document): Resource => toResource(document));
 }

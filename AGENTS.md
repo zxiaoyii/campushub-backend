@@ -16,6 +16,9 @@ institutions share one deployment; every tenant's data must stay isolated.
   A query without a tenant filter is a data-leak bug, not a style issue.
 - `tenantId` is resolved from the authenticated request context — never from a
   client-supplied request body field.
+- Not implemented yet: no endpoint authenticates, so the current models carry
+  no `tenantId`. This rule applies from the lab that introduces auth onward,
+  and is recorded here so the gap stays a decision rather than an oversight.
 
 ---
 
@@ -111,8 +114,9 @@ src/
 ├── models/        Mongoose schemas + TypeScript interfaces ONLY
 ├── middleware/    Cross-cutting concerns (errors, auth, validation)
 ├── types/         Shared type definitions
-├── app.ts         Express app assembly (no listen call)
-└── server.ts      Process bootstrap (listen, DB connect, signals)
+├── app.ts         Express assembly; bootstrapApp opens the DB connection
+├── server.ts      Process bootstrap (listen, signals, shutdown)
+└── seed.ts        Resource catalogue loader (npm run seed)
 ```
 
 ### Per-layer rules
@@ -141,12 +145,17 @@ src/
 **`models/`**
 
 - Mongoose schemas plus the TypeScript interface describing the document.
+- Services map documents to the contract shapes; raw documents and ObjectIds
+  never leave the service layer.
 - No business logic beyond schema-level validation, indexes, and hooks that are
   strictly about persistence.
 
-**`app.ts` vs `server.ts`** — `app.ts` builds and exports the configured
-Express app without binding a port, so it stays importable by tests.
-`server.ts` owns `listen`, the DB connection, and shutdown handling.
+**`app.ts` vs `server.ts`** — `createApp()` builds and exports the configured
+Express app without binding a port or opening a connection, so it stays
+importable by tests. `bootstrapApp()` sits beside it and connects the database
+from config before returning that app. `server.ts` owns `listen`, signals and
+shutdown. Connection details live in `config/database.ts`; neither file talks
+to Mongoose directly.
 
 ---
 

@@ -135,9 +135,10 @@ export default tseslint.config(
     rules: { 'no-restricted-properties': 'off' },
   },
 
-  // server.ts logs startup/shutdown; the error middleware logs failures.
+  // server.ts logs startup/shutdown, the error middleware logs failures, and
+  // the seed script's output is the point of running it.
   {
-    files: ['src/server.ts', 'src/middleware/error-handler.ts'],
+    files: ['src/server.ts', 'src/seed.ts', 'src/middleware/error-handler.ts'],
     rules: { 'no-console': 'off' },
   },
 
