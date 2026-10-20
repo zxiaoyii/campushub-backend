@@ -1,16 +1,13 @@
 # Lab 4 — Steering Log
 
-Failures hit while implementing the reservation engine, and how each one was
-caught and fixed. Everything below happened during this lab; nothing is
-reconstructed after the fact.
+Three things went wrong while building the reservation engine. This is what
+each one was and how it got fixed.
 
-How I worked: I ran the lab as a conversation with the agent rather than by
-typing one prompt per file. The agent wrote the code, and my part was setting
-the direction, checking the output, and deciding what to do when something
-came back wrong. The "Steering" entries below are the corrections that were
-actually issued in that session, written out as the instruction that redirected
-the work. Detection is listed separately from the correction, because in two of
-the three cases the tooling found the problem before I did.
+I worked through this lab as a conversation with the agent rather than one
+prompt per file. The agent wrote the code; I set the direction, checked the
+output, and decided what to do when something came back wrong. The "Steering"
+entries are the corrections actually issued in that session. I list detection
+separately because the tooling caught two of the three before I did.
 
 ---
 
@@ -111,15 +108,16 @@ undefined' is not assignable to parameter of type 'ResourceFilter'`.
 
 ## Notes
 
-The three incidents failed in different ways, and only one of them would have
-been caught by the tooling alone:
+The three failed in different ways, and the difference matters more than the
+bugs themselves.
 
-- Incident 2 was a compiler error. It could not be ignored.
-- Incident 3 was a linter warning on the contract. It would have compiled,
-  run, and only misbehaved for a request that happened to hit the overlap.
-- Incident 1 produced no error of any kind. Types were correct, lint was
-  clean, every endpoint returned 200, and the data was still wrong. It was
-  only found by querying the database directly after a reseed.
+Incident 2 was a compiler error, so it stopped the build. Incident 3 was a
+linter warning on the contract: it would have compiled and run fine, and only
+gone wrong for a request that happened to hit the overlapping path. Incident 1
+produced no error at all. Types checked, lint passed, every endpoint returned
+200, and the data was still wrong. I only found it because I queried the
+database after reseeding.
 
-The further a failure sits from the compiler, the more it depends on someone
-deciding to go and look.
+The checks I have in this repo cover syntax, types, and the contract. None of
+them look at whether the data makes sense, which is the part I have to check
+myself.
