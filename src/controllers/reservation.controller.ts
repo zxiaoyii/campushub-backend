@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import {
+  cancelReservation,
+  confirmReservation,
   createReservation,
   listActiveReservationsForUser,
 } from '../services/reservation.service.ts';
@@ -97,6 +99,32 @@ export async function handleListUserReservations(
       throw new ValidationError('userId must be a non-empty string.');
     }
     res.status(200).json(await listActiveReservationsForUser(userId));
+  } catch (error: unknown) {
+    next(error);
+  }
+}
+
+export async function handleCancelReservation(
+  req: Request<{ reservationId: string }>,
+  res: Response<Reservation>,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { reservationId } = req.params;
+    res.status(200).json(await cancelReservation(reservationId));
+  } catch (error: unknown) {
+    next(error);
+  }
+}
+
+export async function handleConfirmReservation(
+  req: Request<{ reservationId: string }>,
+  res: Response<Reservation>,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { reservationId } = req.params;
+    res.status(200).json(await confirmReservation(reservationId));
   } catch (error: unknown) {
     next(error);
   }

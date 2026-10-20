@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { connectDatabase, disconnectDatabase } from './config/database.ts';
+import { clearReservations } from './services/reservation.service.ts';
 import { replaceResourceCatalogue } from './services/resource.service.ts';
 import type { ResourceInput } from './types/reservation.ts';
 
@@ -33,7 +34,9 @@ const CATALOGUE: readonly ResourceInput[] = [
 await connectDatabase();
 
 try {
+  const removed = await clearReservations();
   const resources = await replaceResourceCatalogue(CATALOGUE);
+  console.log(`[seed] removed ${String(removed)} reservations`);
   console.log(`[seed] inserted ${String(resources.length)} resources`);
   for (const resource of resources) {
     console.log(

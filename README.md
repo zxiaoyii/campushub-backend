@@ -47,16 +47,22 @@ The server listens on <http://localhost:3000> and mounts every route under
 `docs/openapi.yaml` is the authoritative contract; the table below summarizes
 it.
 
-| Method | Path                             | Success | Errors        |
-| ------ | -------------------------------- | ------- | ------------- |
-| GET    | `/api/v1/health`                 | 200     | —             |
-| GET    | `/api/v1/resources`              | 200     | 400           |
-| POST   | `/api/v1/reservations`           | 201     | 400, 404, 409 |
-| GET    | `/api/v1/reservations/user/{id}` | 200     | 400           |
+| Method | Path                                | Success | Errors        |
+| ------ | ----------------------------------- | ------- | ------------- |
+| GET    | `/api/v1/health`                    | 200     | —             |
+| GET    | `/api/v1/resources`                 | 200     | 400           |
+| POST   | `/api/v1/reservations`              | 201     | 400, 404, 409 |
+| GET    | `/api/v1/reservations/user/{id}`    | 200     | 400           |
+| PATCH  | `/api/v1/reservations/{id}/confirm` | 200     | 400, 404, 409 |
+| PATCH  | `/api/v1/reservations/{id}/cancel`  | 200     | 400, 404, 409 |
 
-`GET /resources` accepts an optional `?type=` filter. It is a non-empty string
-rather than an enum: an unrecognised type matches nothing (`200 []`), while an
-empty value is a malformed request (`400`).
+`GET /resources` accepts `?type=` and `?isAvailable=`. `type` is a non-empty
+string rather than an enum: an unrecognised type matches nothing (`200 []`),
+while an empty value is a malformed request (`400`). `isAvailable` accepts
+only `true` or `false`.
+
+Cancelling a reservation frees its slot straight away, because the overlap
+check only counts PENDING and CONFIRMED rows.
 
 Every error responds with the contract's flat shape:
 

@@ -26,17 +26,31 @@ function isResourceType(value: string): value is ResourceType {
   return (RESOURCE_TYPES as readonly string[]).includes(value);
 }
 
+export interface ResourceFilter {
+  readonly type?: string;
+  readonly isAvailable?: boolean;
+}
+
 /**
  * An unrecognised type matches nothing rather than failing, which is what the
  * contract documents — so it never reaches the database.
  */
-export async function listResources(type?: string): Promise<Resource[]> {
+export async function listResources(
+  criteria: ResourceFilter = {},
+): Promise<Resource[]> {
+  const { type, isAvailable } = criteria;
+
   if (type !== undefined && !isResourceType(type)) {
     return [];
   }
 
-  const filter: QueryFilter<IResource> =
-    type === undefined ? {} : { type: type };
+  const filter: QueryFilter<IResource> = {};
+  if (type !== undefined) {
+    filter.type = type;
+  }
+  if (isAvailable !== undefined) {
+    filter.isAvailable = isAvailable;
+  }
 
   const documents = await ResourceModel.find(filter)
     .sort({ name: 1 })

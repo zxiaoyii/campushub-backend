@@ -56,6 +56,16 @@ paths:
             type: string
             minLength: 1
           example: ROOM
+        - name: isAvailable
+          in: query
+          required: false
+          description: |
+            Filters to resources that are, or are not, currently bookable.
+            Accepts only the strings "true" and "false"; anything else is a
+            400.
+          schema:
+            type: boolean
+          example: true
       responses:
         '200':
           description: The matching resources.
@@ -115,6 +125,73 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /reservations/{reservationId}/cancel:
+    patch:
+      tags: [Reservations]
+      summary: Cancel a reservation
+      description: |
+        Moves an active reservation to CANCELLED, which immediately frees its
+        time slot for other bookings. Only PENDING or CONFIRMED reservations
+        can be cancelled.
+      operationId: cancelReservation
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: The cancelled reservation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/ReservationNotFound'
+        '409':
+          description: The reservation is already cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: RESERVATION_NOT_ACTIVE
+                message: Reservation is already cancelled.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /reservations/{reservationId}/confirm:
+    patch:
+      tags: [Reservations]
+      summary: Confirm a reservation
+      description: |
+        Moves a PENDING reservation to CONFIRMED. The slot stays occupied
+        either way; this records that the booking was approved.
+      operationId: confirmReservation
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: The confirmed reservation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/ReservationNotFound'
+        '409':
+          description: The reservation is not PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: RESERVATION_NOT_PENDING
+                message: Only a PENDING reservation can be confirmed.
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /reservations/user/{userId}:
     get:
       tags: [Reservations]
@@ -147,7 +224,28 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
 components:
+  parameters:
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      description: Identifier of the reservation, a MongoDB ObjectId.
+      schema:
+        type: string
+        minLength: 1
+      example: 68e1f0a7c3b4d5e6f7a8b9c1
+
   responses:
+    ReservationNotFound:
+      description: No reservation with that id exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: RESERVATION_NOT_FOUND
+            message: Reservation "68e1f0a7c3b4d5e6f7a8b9c1" does not exist.
+
     ValidationError:
       description: The request was malformed.
       content:

@@ -1,4 +1,4 @@
-import { isValidObjectId, type Types } from 'mongoose';
+import { isValidObjectId, type HydratedDocument, type Types } from 'mongoose';
 import {
   ReservationModel,
   type IReservation,
@@ -96,4 +96,75 @@ export async function listActiveReservationsForUser(
     .exec();
 
   return documents.map(toReservation);
+}
+
+async function loadReservation(
+  reservationId: string,
+): Promise<HydratedDocument<IReservation>> {
+  if (!isValidObjectId(reservationId)) {
+    throw new ValidationError(
+      'reservationId must be a valid reservation identifier.',
+    );
+  }
+
+  const reservation = await ReservationModel.findById(reservationId).exec();
+  if (reservation === null) {
+    throw new NotFoundError(
+      'RESERVATION_NOT_FOUND',
+      `Reservation "${reservationId}" does not exist.`,
+    );
+  }
+
+  return reservation;
+}
+
+/**
+ * Moves a reservation to CANCELLED. The slot is freed as a side effect: the
+ * overlap check only looks at PENDING and CONFIRMED rows.
+ */
+export async function cancelReservation(
+  reservationId: string,
+): Promise<Reservation> {
+  const reservation = await loadReservation(reservationId);
+
+  if (reservation.status === 'CANCELLED') {
+    throw new ConflictError(
+      'RESERVATION_NOT_ACTIVE',
+      'Reservation is already cancelled.',
+    );
+  }
+
+  reservation.status = 'CANCELLED';
+  await reservation.save();
+
+  return toReservation(reservation);
+}
+
+/** Moves a PENDING reservation to CONFIRMED. The slot stays occupied. */
+export async function confirmReservation(
+  reservationId: string,
+): Promise<Reservation> {
+  const reservation = await loadReservation(reservationId);
+
+  if (reservation.status !== 'PENDING') {
+    throw new ConflictError(
+      'RESERVATION_NOT_PENDING',
+      `Only a PENDING reservation can be confirmed; this one is ${reservation.status}.`,
+    );
+  }
+
+  reservation.status = 'CONFIRMED';
+  await reservation.save();
+
+  return toReservation(reservation);
+}
+
+/**
+ * Removes every reservation. Used by the seed script: reseeding assigns new
+ * resource ids, so reservations left behind would point at resources that no
+ * longer exist.
+ */
+export async function clearReservations(): Promise<number> {
+  const result = await ReservationModel.deleteMany({}).exec();
+  return result.deletedCount;
 }
