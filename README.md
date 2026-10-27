@@ -112,6 +112,22 @@ npx @redocly/cli lint docs/openapi.yaml
 The one expected warning is the `localhost` server URL, which the course
 requires.
 
+## Frontend
+
+A React + TypeScript client lives in `client/`. Start the backend first, then:
+
+```bash
+cd client
+npm ci
+npm run dev        # http://localhost:5173
+```
+
+The dev server proxies `/api` to port 3000, so no CORS setup is needed. The
+page lists resources with a type filter, books a selected resource, and shows
+the signed-in student's bookings with a cancel action. A double booking comes
+back as 409 and is shown as an explicit conflict message rather than a generic
+failure.
+
 ## Layout
 
 ```
@@ -127,6 +143,12 @@ src/
 ├── app.ts          Express assembly; bootstrapApp opens the DB connection
 ├── server.ts       Process bootstrap (listen, signals)
 └── seed.ts         Resource catalogue loader
+
+client/src/
+├── api/            Typed calls to the backend
+├── components/     ResourceList, BookingForm, UserReservations
+├── types/          Mirrors components/schemas
+└── App.tsx         Composition and shared state
 ```
 
 Dependencies flow one way: `routes → controllers → services → models`. ESLint

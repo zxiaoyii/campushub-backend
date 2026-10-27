@@ -1,0 +1,28 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--danger-border);
+  border-left: 4px solid var(--danger);
+  border-radius: 6px;
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.dismiss {
+  flex-shrink: 0;
+  border: 1px solid var(--danger-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  background: var(--danger-border);
+}

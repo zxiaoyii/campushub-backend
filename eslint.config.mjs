@@ -62,7 +62,15 @@ const layerBoundaries = [
 ];
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'eslint.config.mjs'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'eslint.config.mjs',
+      // client/ is a separate Vite project with its own linting.
+      'client/**',
+    ],
+  },
 
   ...tseslint.configs.recommendedTypeChecked,
 

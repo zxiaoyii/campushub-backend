@@ -242,7 +242,39 @@ defeating their purpose. All are forbidden:
 
 ---
 
-## 5. API Contract
+## 5. Frontend (`client/`)
+
+React + TypeScript on Vite, in `client/`. It is a separate npm project with
+its own `package.json`; the backend rules above still apply to `src/`.
+
+```
+client/src/
+├── api/campushubApi.ts   Typed calls to the backend, one per contract operation
+├── components/           One component per file, with a .module.css beside it
+├── types/api.ts          Mirrors components/schemas in docs/openapi.yaml
+└── App.tsx               Composition and shared state
+```
+
+- **Components are functional and take an explicit exported props interface.**
+  No class components, no implicit props.
+- **State lives in hooks**: `useState`, `useEffect`, or a custom hook. Never
+  call the API from inside JSX — components call functions from `api/`.
+- **Every async path carries `isLoading` and `error` state.** A request that
+  can fail needs a visible outcome in both directions; a spinner with no error
+  branch is incomplete.
+- **A 409 gets its own message.** `ApiError` carries the backend's `code` and
+  `message`, so a conflict is reported as a conflict, not as "something went
+  wrong".
+- Styling is CSS Modules, one file per component. Colours come from the
+  variables in `index.css`, which cover light and dark.
+- `client/src/types/api.ts` is generated from the contract by hand. If the
+  contract changes, update it in the same commit as the backend types.
+- The dev server proxies `/api` to `http://localhost:3000` (see
+  `vite.config.ts`), so the backend needs no CORS configuration.
+
+---
+
+## 6. API Contract
 
 `docs/openapi.yaml` is the authoritative description of every HTTP endpoint.
 
@@ -265,7 +297,7 @@ docs/openapi.yaml`. The one accepted warning is the `localhost` server URL,
 
 ---
 
-## 6. Git & Commit Formatting
+## 7. Git & Commit Formatting
 
 - Commit messages follow Conventional Commits:
   `feat|fix|chore|refactor|docs|test(scope): summary`
@@ -278,7 +310,7 @@ docs/openapi.yaml`. The one accepted warning is the `localhost` server URL,
 
 ---
 
-## 7. Definition of Done
+## 8. Definition of Done
 
 Run `npm run typecheck && npm run lint && npm run format:check` first. Most of
 the rules above are machine-enforced by `eslint.config.mjs`, which cites the
