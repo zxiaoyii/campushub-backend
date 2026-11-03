@@ -1,10 +1,10 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   listResources,
   type ResourceFilter,
 } from '../services/resource.service.ts';
 import { ValidationError } from '../types/domain-error.ts';
-import type { Resource } from '../types/reservation.ts';
+import type { Resource } from '../../shared/contract.ts';
 
 /** Absent means no filter; empty or repeated is a malformed request. */
 function parseTypeFilter(raw: unknown): string | undefined {
@@ -34,19 +34,14 @@ function parseIsAvailableFilter(raw: unknown): boolean | undefined {
 export async function handleListResources(
   req: Request,
   res: Response<Resource[]>,
-  next: NextFunction,
 ): Promise<void> {
-  try {
-    const type = parseTypeFilter(req.query['type']);
-    const isAvailable = parseIsAvailableFilter(req.query['isAvailable']);
+  const type = parseTypeFilter(req.query['type']);
+  const isAvailable = parseIsAvailableFilter(req.query['isAvailable']);
 
-    const criteria: ResourceFilter = {
-      ...(type === undefined ? {} : { type }),
-      ...(isAvailable === undefined ? {} : { isAvailable }),
-    };
+  const criteria: ResourceFilter = {
+    ...(type === undefined ? {} : { type }),
+    ...(isAvailable === undefined ? {} : { isAvailable }),
+  };
 
-    res.status(200).json(await listResources(criteria));
-  } catch (error: unknown) {
-    next(error);
-  }
+  res.status(200).json(await listResources(criteria));
 }

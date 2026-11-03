@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { ApiError, createReservation } from '../api/campushubApi';
-import type { Resource } from '../types/api';
+import type { Resource } from '@contract';
+import { useCreateReservation } from '../hooks/useReservations';
 import { ErrorBanner } from './ErrorBanner';
 import styles from './BookingForm.module.css';
 
@@ -18,9 +18,8 @@ function toIso(localValue: string): string {
 export function BookingForm({ resource, userId, onBooked }: BookingFormProps) {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const { isSubmitting, error, success, book, fail, dismissError } =
+    useCreateReservation();
 
   /** Client-side checks, so an obviously bad form never reaches the API. */
   function validate(): string | null {
@@ -43,42 +42,24 @@ export function BookingForm({ resource, userId, onBooked }: BookingFormProps) {
     event: FormEvent<HTMLFormElement>,
   ): Promise<void> {
     event.preventDefault();
-    setSuccess(null);
 
     const problem = validate();
-    if (problem !== null) {
-      setError(problem);
+    if (problem !== null || resource === null) {
+      fail(problem ?? 'Pick a resource first.');
       return;
     }
 
-    setError(null);
-    setIsSubmitting(true);
+    const booked = await book({
+      resourceId: resource.id,
+      userId: userId.trim(),
+      startTime: toIso(startTime),
+      endTime: toIso(endTime),
+    });
 
-    try {
-      const reservation = await createReservation({
-        resourceId: resource!.id,
-        userId: userId.trim(),
-        startTime: toIso(startTime),
-        endTime: toIso(endTime),
-      });
-      setSuccess(
-        `Booked. Reservation ${reservation.id} is ${reservation.status}.`,
-      );
+    if (booked) {
       setStartTime('');
       setEndTime('');
       onBooked();
-    } catch (caught: unknown) {
-      if (caught instanceof ApiError) {
-        setError(
-          caught.isConflict
-            ? `This resource is already reserved for the selected time window. (${caught.code})`
-            : caught.message,
-        );
-      } else {
-        setError('Something went wrong while creating the reservation.');
-      }
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -97,12 +78,7 @@ export function BookingForm({ resource, userId, onBooked }: BookingFormProps) {
       </p>
 
       {error !== null && (
-        <ErrorBanner
-          message={error}
-          onDismiss={() => {
-            setError(null);
-          }}
-        />
+        <ErrorBanner message={error} onDismiss={dismissError} />
       )}
       {success !== null && <p className={styles.success}>{success}</p>}
 

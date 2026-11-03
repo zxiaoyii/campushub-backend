@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { DomainError } from '../types/domain-error.ts';
-import type { ErrorResponse } from '../types/error.ts';
+import type { ErrorResponse } from '../../shared/contract.ts';
 
 export function notFoundHandler(
   req: Request,
@@ -13,9 +13,13 @@ export function notFoundHandler(
 }
 
 /**
- * Centralized error responder. Controllers forward failures here via
- * next(error) so clients receive the ErrorResponse shape defined in
- * docs/openapi.yaml and internal details are never leaked.
+ * Centralized error responder: the only place in the application that turns a
+ * failure into an HTTP response, so clients always receive the ErrorResponse
+ * shape defined in docs/openapi.yaml and internal details are never leaked.
+ *
+ * Controllers do not catch. Express 5 forwards both a synchronous throw and a
+ * rejected promise from a handler to this middleware, so the inline
+ * try/catch + next(error) blocks they used to carry were pure duplication.
  *
  * Domain errors carry their own status and code; anything else is an
  * unexpected fault and collapses to a generic 500.

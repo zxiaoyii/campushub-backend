@@ -2,7 +2,7 @@ import process from 'node:process';
 import { connectDatabase, disconnectDatabase } from './config/database.ts';
 import { clearReservations } from './services/reservation.service.ts';
 import { replaceResourceCatalogue } from './services/resource.service.ts';
-import type { ResourceInput } from './types/reservation.ts';
+import type { ResourceInput } from '../shared/contract.ts';
 
 const CATALOGUE: readonly ResourceInput[] = [
   {

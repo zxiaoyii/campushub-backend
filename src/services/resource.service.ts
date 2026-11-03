@@ -5,7 +5,7 @@ import {
   type Resource,
   type ResourceInput,
   type ResourceType,
-} from '../types/reservation.ts';
+} from '../../shared/contract.ts';
 
 /** The persisted fields this layer reads back, independent of Mongoose's document wrappers. */
 interface ResourceRecord extends IResource {

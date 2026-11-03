@@ -1,0 +1,46 @@
+# Files an AI coding agent should never read.
+#
+# Everything here is either generated from source, enormous, or irrelevant to
+# a change. Loading it wastes the context window and invites the agent to
+# "fix" a build artifact instead of the file it came from.
+#
+# The agent's working set is: src/, shared/, client/src/, docs/, and the root
+# config files.
+
+# --- Dependencies -----------------------------------------------------------
+node_modules/
+client/node_modules/
+
+# --- Build output: generated from src/, never edited by hand -----------------
+dist/
+build/
+client/dist/
+*.tsbuildinfo
+
+# --- Lockfiles: tens of thousands of lines, no reviewable content ------------
+package-lock.json
+client/package-lock.json
+
+# --- Coverage and test reports ----------------------------------------------
+coverage/
+.nyc_output/
+
+# --- Logs and historical output ---------------------------------------------
+logs/
+*.log
+npm-debug.log*
+
+# --- Source maps and generated bundle maps ----------------------------------
+*.map
+client/dist/assets/*.map
+stats.html
+
+# --- Secrets: never read, never echoed back ---------------------------------
+.env
+.env.local
+.env.*.local
+
+# --- OS and editor noise ----------------------------------------------------
+.DS_Store
+.idea/
+.vscode/

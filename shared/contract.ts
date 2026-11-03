@@ -1,7 +1,14 @@
 /**
- * Types generated from docs/openapi.yaml. The contract is authoritative: field
- * names, enum members and optionality here mirror components/schemas exactly.
+ * The single declaration layer for everything that crosses the HTTP boundary.
+ * Both `src/` (Express) and `client/` (React) import these types, so a field
+ * can only be renamed in one place.
+ *
+ * Generated from docs/openapi.yaml by hand. The contract is authoritative:
+ * names, enum members and optionality mirror components/schemas exactly.
  * Change the contract first, then this file.
+ *
+ * This file must stay dependency-free. It is compiled by two projects with
+ * different module settings, and it is the one module both sides trust.
  */
 
 /** components/schemas/ResourceType */
@@ -52,10 +59,14 @@ export interface ReservationCreate {
   readonly endTime: string;
 }
 
+/**
+ * components/schemas/ErrorResponse — flat { code, message }. Every error the
+ * API emits uses this shape, and the client parses exactly this shape.
+ */
+export interface ErrorResponse {
+  readonly code: string;
+  readonly message: string;
+}
+
 /** A resource before it has been persisted and assigned an id. */
 export type ResourceInput = Omit<Resource, 'id'>;
-
-/** Query parameters accepted by GET /resources. */
-export interface ListResourcesQuery {
-  readonly type?: string;
-}

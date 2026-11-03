@@ -13,7 +13,7 @@ import {
   ACTIVE_RESERVATION_STATUSES,
   type Reservation,
   type ReservationCreate,
-} from '../types/reservation.ts';
+} from '../../shared/contract.ts';
 
 /** The persisted fields this layer reads back, independent of Mongoose's document wrappers. */
 interface ReservationRecord extends IReservation {

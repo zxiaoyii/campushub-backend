@@ -1,5 +1,5 @@
 import { Schema, model, type Model } from 'mongoose';
-import { RESOURCE_TYPES, type ResourceType } from '../types/reservation.ts';
+import { RESOURCE_TYPES, type ResourceType } from '../../shared/contract.ts';
 
 export interface IResource {
   name: string;

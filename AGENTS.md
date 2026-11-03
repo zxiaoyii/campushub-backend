@@ -29,15 +29,15 @@ institutions share one deployment; every tenant's data must stay isolated.
 The packages below are **pre-approved**: install them when a task genuinely
 needs them. Anything not in this table requires approval first.
 
-| Purpose  | Package                                                                                            |
-| -------- | -------------------------------------------------------------------------------------------------- |
-| Language | TypeScript (strict mode)                                                                           |
-| Runtime  | Node.js >= 24.21.0                                                                                 |
-| HTTP     | `express`                                                                                          |
-| Database | `mongoose` (MongoDB)                                                                               |
-| Config   | `dotenv`                                                                                           |
-| Types    | `@types/node`, `@types/express`                                                                    |
-| Tooling  | `typescript` (6.x), `ts-node`, `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier` |
+| Purpose  | Package                                                                                 |
+| -------- | --------------------------------------------------------------------------------------- |
+| Language | TypeScript (strict mode)                                                                |
+| Runtime  | Node.js >= 24.21.0                                                                      |
+| HTTP     | `express`                                                                               |
+| Database | `mongoose` (MongoDB)                                                                    |
+| Config   | `dotenv`                                                                                |
+| Types    | `@types/node`, `@types/express`                                                         |
+| Tooling  | `typescript` (6.x), `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier` |
 
 ### Forbidden
 
@@ -63,14 +63,14 @@ range of `>=4.8.4 <6.1.0`, so TypeScript 7 makes the lint tooling uninstallable.
 Enforced rules are worth more than the newest compiler; do not bump TypeScript
 past 6.x until `typescript-eslint` supports it.
 
-Scripts run sources through Node's native TypeScript support rather than
-`ts-node`. Both work on TypeScript 6, but `node --watch` gives reload without a
-loader flag or an extra dependency:
+Scripts run sources through Node's native TypeScript support. `node --watch`
+gives reload without a loader flag or an extra dependency, so no TypeScript
+runner is installed:
 
 ```jsonc
 "dev":   "node --watch src/server.ts",
 "build": "tsc",
-"start": "node dist/server.js"
+"start": "node dist/src/server.js"
 ```
 
 The project is **ESM** (`"type": "module"`). Consequences, both mandatory:
@@ -101,18 +101,20 @@ routes/ → controllers/ → services/ → models/
 
 A layer may only import from layers to its right. **Never** import in reverse.
 
-`config/` and `types/` are cross-cutting: any layer may import them, but they
-must not import from any business layer, so they stay free of domain logic.
-`middleware/` may be imported by `routes/` and `app.ts` only.
+`config/`, `types/` and the root-level `shared/` are cross-cutting: any layer
+may import them, but they must not import from any business layer, so they stay
+free of domain logic. `middleware/` may be imported by `routes/` and `app.ts`
+only.
 
 ```
+shared/contract.ts  Types crossing the HTTP boundary, used by src/ AND client/
 src/
 ├── config/        Environment loading, DB connection setup
 ├── routes/        Route definitions + middleware mapping ONLY
 ├── controllers/   HTTP request/response handling + status codes
 ├── services/      Business logic (pure, HTTP-agnostic)
 ├── models/        Mongoose schemas + TypeScript interfaces ONLY
-├── middleware/    Cross-cutting concerns (errors, auth, validation)
+├── middleware/    Cross-cutting concerns (errorHandler.ts, auth, validation)
 ├── types/         Shared type definitions
 ├── app.ts         Express assembly; bootstrapApp opens the DB connection
 ├── server.ts      Process bootstrap (listen, signals, shutdown)
@@ -133,7 +135,10 @@ src/
   sets the status code.
 - **No `Model.find()` / `Model.create()` / any direct DB access.**
 - No business rules, no calculations, no branching on domain state.
-- Passes errors to `next(err)` — controllers do not format error responses.
+- **Does not catch.** Express 5 forwards a synchronous throw and a rejected
+  promise from a handler to the error middleware on its own, so a controller
+  has no `try/catch` and no `next` parameter. Controllers never format an
+  error response.
 
 **`services/`**
 
@@ -178,12 +183,14 @@ to Mongoose directly.
 
 ### Async & error handling
 
-- **No unhandled promises.** Every `await` on a fallible call is covered by
-  `try/catch`, or the route is wrapped in an async error-handling helper.
-  Never leave a floating promise (no un-awaited async call), and never mix
-  `.then()/.catch()` chains into `async` code.
-- Controllers catch and forward with `next(error)`; a single centralized
-  error-handling middleware produces the client-facing response.
+- **No unhandled promises.** Never leave a floating promise (no un-awaited
+  async call), and never mix `.then()/.catch()` chains into `async` code.
+- **One error path.** `src/middleware/errorHandler.ts` is the only place that
+  turns a failure into an HTTP response. Services throw typed domain errors;
+  controllers let them travel. A `try/catch` in a controller or route is
+  duplication and is removed, not added.
+- Catch only where the code genuinely recovers or adds information — not to
+  re-throw the same error.
 - Never swallow an error silently — no empty `catch {}` blocks.
 - Throw `Error` subclasses, never bare strings or object literals.
 - Unknown errors must not leak stack traces or internal messages to clients.
@@ -234,7 +241,9 @@ defeating their purpose. All are forbidden:
   `409` conflict, `500` unexpected.
 - All routes are versioned under `/api/v1`.
 - Files use `kebab-case`, with an optional layer suffix where it aids
-  navigation (`health.controller.ts`, `health.service.ts`, `error-handler.ts`).
+  navigation (`health.controller.ts`, `health.service.ts`, `domain-error.ts`).
+  `src/middleware/errorHandler.ts` is the one camelCase file: the course
+  deliverable names that exact path.
   Types/interfaces are `PascalCase`; variables and functions `camelCase`.
 - Do not create new docs or example code unless asked. `README.md` already
   exists: when an endpoint, script or required Node version changes, update it
@@ -250,15 +259,19 @@ its own `package.json`; the backend rules above still apply to `src/`.
 ```
 client/src/
 ├── api/campushubApi.ts   Typed calls to the backend, one per contract operation
+├── hooks/                Fetching and state, extracted from the components
 ├── components/           One component per file, with a .module.css beside it
-├── types/api.ts          Mirrors components/schemas in docs/openapi.yaml
 └── App.tsx               Composition and shared state
 ```
 
 - **Components are functional and take an explicit exported props interface.**
   No class components, no implicit props.
-- **State lives in hooks**: `useState`, `useEffect`, or a custom hook. Never
-  call the API from inside JSX — components call functions from `api/`.
+- **Fetching and state live in a custom hook under `hooks/`**, not in the
+  component. A component that calls `api/` directly, or that repeats a
+  `isLoading` / `error` / `try-catch-finally` block another component already
+  has, is extracted. Components render; hooks talk to the server.
+- A component over ~150 lines is a signal that state and rendering are tangled
+  — split it before adding to it.
 - **Every async path carries `isLoading` and `error` state.** A request that
   can fail needs a visible outcome in both directions; a spinner with no error
   branch is incomplete.
@@ -267,8 +280,10 @@ client/src/
   wrong".
 - Styling is CSS Modules, one file per component. Colours come from the
   variables in `index.css`, which cover light and dark.
-- `client/src/types/api.ts` is generated from the contract by hand. If the
-  contract changes, update it in the same commit as the backend types.
+- **Contract types are never redeclared here.** The client imports them from
+  `@contract`, the Vite and TypeScript alias for `shared/contract.ts`, which
+  the backend imports too. A second copy of `Resource` or `Reservation` under
+  `client/src/` is a bug waiting to drift.
 - The dev server proxies `/api` to `http://localhost:3000` (see
   `vite.config.ts`), so the backend needs no CORS configuration.
 
@@ -284,8 +299,10 @@ client/src/
 - Route paths, request/response field names and status codes in the code must
   match the contract exactly. An endpoint that is not in the contract does not
   exist.
-- `src/types/reservation.ts` mirrors `components/schemas`. Keep the names
-  identical so a divergence is obvious on sight.
+- `shared/contract.ts` mirrors `components/schemas` and is the **only**
+  declaration of those shapes in the repository; `src/` and `client/` both
+  import it. Keep the names identical to the contract so a divergence is
+  obvious on sight.
 - Request bodies are validated at the controller boundary against the schema,
   including `additionalProperties: false` — an unexpected property is a 400,
   not something to ignore.
@@ -297,7 +314,27 @@ docs/openapi.yaml`. The one accepted warning is the `localhost` server URL,
 
 ---
 
-## 7. Git & Commit Formatting
+## 7. Agent Context Hygiene
+
+The context window is a budget. Everything an agent reads to answer a question
+is paid for twice: once in tokens, and again in the odds that it edits a
+generated file instead of the source it came from.
+
+- `.cursorignore` lists what an agent must never read: `node_modules/`,
+  `dist/`, `client/dist/`, lockfiles, `coverage/`, logs, source maps and
+  `.env`. `.claude/settings.json` denies the same paths for Claude Code.
+  Adding a generated directory means adding it to both.
+- The working set is `src/`, `shared/`, `client/src/`, `docs/` and the root
+  config files. Nothing else should need to be opened to make a change.
+- This file is a rulebook, not a changelog. A rule that no longer describes the
+  code is worse than no rule, because it will be followed. Delete stale rules
+  in the same commit that makes them stale.
+- Do not add a rule that `eslint.config.mjs` already enforces. Prose that
+  repeats a machine check is context with no payload.
+
+---
+
+## 8. Git & Commit Formatting
 
 - Commit messages follow Conventional Commits:
   `feat|fix|chore|refactor|docs|test(scope): summary`
@@ -310,7 +347,7 @@ docs/openapi.yaml`. The one accepted warning is the `localhost` server URL,
 
 ---
 
-## 8. Definition of Done
+## 9. Definition of Done
 
 Run `npm run typecheck && npm run lint && npm run format:check` first. Most of
 the rules above are machine-enforced by `eslint.config.mjs`, which cites the
@@ -320,21 +357,24 @@ itself a violation (§4, No escape hatches).
 
 Then verify **all** of the following:
 
-1. `npx tsc --noEmit` passes with zero errors.
-2. No `any` (or its aliases), no suppression comments, no `.js` files added
+1. No `any` (or its aliases), no suppression comments, no `.js` files added
    under `src/`.
-3. `tsconfig.json`, lint config, and existing npm scripts were not weakened.
-4. No new dependency was added without approval.
-5. No database access outside `services/` and `models/`.
-6. No business logic inside `routes/` or `controllers/`.
-7. Every function at a module boundary has explicit parameter and return types.
-8. Every async path has explicit error handling; no floating promises.
-9. Tenant-owned queries are scoped by `tenantId`.
-10. Any new env var is present in `.env-example`.
-11. Paths, fields and status codes match `docs/openapi.yaml`, and the contract
-    still lints.
-12. The server actually starts and the touched endpoints were called — type
+2. `tsconfig.json`, lint config, and existing npm scripts were not weakened.
+3. No new dependency was added without approval.
+4. No database access outside `services/` and `models/`.
+5. No business logic inside `routes/` or `controllers/`.
+6. Every function at a module boundary has explicit parameter and return types.
+7. No floating promises, and no `try/catch` added where the error middleware
+   (§4) or an existing hook (§5) already covers the failure.
+8. Tenant-owned queries are scoped by `tenantId`.
+9. Any new env var is present in `.env-example`.
+10. Paths, fields and status codes match `docs/openapi.yaml`, the contract
+    still lints, and no contract shape was redeclared outside
+    `shared/contract.ts`.
+11. The server actually starts and the touched endpoints were called — type
     checking does not catch unsupported runtime syntax (§2).
+12. `client/` still builds (`cd client && npm run build`) when `shared/` or any
+    component changed.
 
 If a rule was intentionally bent, say so explicitly in your response and
 explain why. Do not report success while a constraint is silently violated.

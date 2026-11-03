@@ -2,7 +2,7 @@ import { Schema, model, type Model, type Types } from 'mongoose';
 import {
   RESERVATION_STATUSES,
   type ReservationStatus,
-} from '../types/reservation.ts';
+} from '../../shared/contract.ts';
 
 export interface IReservation {
   resourceId: Types.ObjectId;

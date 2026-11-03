@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BookingForm } from './components/BookingForm';
 import { ResourceList } from './components/ResourceList';
 import { UserReservations } from './components/UserReservations';
-import type { Resource } from './types/api';
+import type { Resource } from '@contract';
 import styles from './App.module.css';
 
 export function App() {

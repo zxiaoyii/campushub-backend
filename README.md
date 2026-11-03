@@ -2,7 +2,7 @@
 
 Multi-tenant campus resource management API — CS 5500 semester project.
 
-TypeScript · Node.js · Express · MongoDB (Mongoose, arriving in a later lab)
+TypeScript · Node.js · Express · MongoDB (Mongoose) · React
 
 ## Requirements
 
@@ -132,6 +132,7 @@ failure.
 
 ```
 docs/openapi.yaml   Authoritative API contract
+shared/contract.ts  Types crossing the HTTP boundary, imported by both sides
 src/
 ├── config/         Environment loading and validation
 ├── routes/         Path-to-controller mapping only
@@ -139,17 +140,27 @@ src/
 ├── services/       Business logic, HTTP-agnostic
 ├── models/         Mongoose schemas and document interfaces
 ├── middleware/     Centralized error handling
-├── types/          Shared interfaces, mirroring the contract
+├── types/          Server-only types (domain errors, health)
 ├── app.ts          Express assembly; bootstrapApp opens the DB connection
 ├── server.ts       Process bootstrap (listen, signals)
 └── seed.ts         Resource catalogue loader
 
 client/src/
 ├── api/            Typed calls to the backend
+├── hooks/          Fetching and state (useReservations, useResources)
 ├── components/     ResourceList, BookingForm, UserReservations
-├── types/          Mirrors components/schemas
 └── App.tsx         Composition and shared state
 ```
+
+`shared/contract.ts` is the only declaration of `Resource`, `Reservation` and
+`ErrorResponse` in the repository. The backend imports it by relative path;
+the client imports it as `@contract`, aliased in `vite.config.ts` and
+`client/tsconfig.app.json`. Renaming a field there breaks both sides at once,
+which is the point.
+
+Controllers contain no `try/catch`. Express 5 forwards a throw or a rejected
+promise to `src/middleware/errorHandler.ts`, which is the only place a failure
+becomes an HTTP response.
 
 Dependencies flow one way: `routes → controllers → services → models`. ESLint
 enforces this, so a cross-layer import fails `npm run lint` rather than
@@ -161,3 +172,11 @@ slipping through review.
 repository; `CLAUDE.md` imports it so Claude Code reads the same rules. It
 constrains the stack, the architectural boundaries, typing and error handling,
 and makes `docs/openapi.yaml` authoritative over the implementation.
+
+`.cursorignore` lists the paths an agent must never read — dependencies, build
+output, lockfiles, coverage, logs, source maps and `.env`. Claude Code does not
+read that file, so `.claude/settings.json` denies the same paths. Both have to
+be updated when a new generated directory appears.
+
+`docs/lab6-refactor-audit.md` records the refactoring pass over Labs 1–5: what
+was duplicated, what was removed, and how it was verified.

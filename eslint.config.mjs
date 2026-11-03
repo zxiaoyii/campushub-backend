@@ -47,8 +47,10 @@ const layerBoundaries = [
     message: 'models/ may only define schemas and interfaces (AGENTS.md §3).',
   },
   {
-    // config/ and types/ are cross-cutting and must not learn about the domain.
-    files: ['src/config/**/*.ts', 'src/types/**/*.ts'],
+    // config/, types/ and shared/ are cross-cutting and must not learn about
+    // the domain. shared/ additionally crosses into client/, so it must stay
+    // free of server-only imports.
+    files: ['src/config/**/*.ts', 'src/types/**/*.ts', 'shared/**/*.ts'],
     forbidden: [
       '**/routes/**',
       '**/controllers/**',
@@ -57,7 +59,7 @@ const layerBoundaries = [
       '**/middleware/**',
     ],
     message:
-      'config/ and types/ are cross-cutting and must not import business layers (AGENTS.md §3).',
+      'config/, types/ and shared/ are cross-cutting and must not import business layers (AGENTS.md §3).',
   },
 ];
 
@@ -146,7 +148,7 @@ export default tseslint.config(
   // server.ts logs startup/shutdown, the error middleware logs failures, and
   // the seed script's output is the point of running it.
   {
-    files: ['src/server.ts', 'src/seed.ts', 'src/middleware/error-handler.ts'],
+    files: ['src/server.ts', 'src/seed.ts', 'src/middleware/errorHandler.ts'],
     rules: { 'no-console': 'off' },
   },
 

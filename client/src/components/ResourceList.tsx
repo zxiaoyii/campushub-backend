@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError, fetchResources } from '../api/campushubApi';
-import { RESOURCE_TYPES, type Resource, type ResourceType } from '../types/api';
+import { RESOURCE_TYPES, type Resource } from '@contract';
+import { useResources, type TypeFilter } from '../hooks/useResources';
 import { ErrorBanner } from './ErrorBanner';
 import styles from './ResourceList.module.css';
 
@@ -9,37 +8,11 @@ export interface ResourceListProps {
   onSelect: (resource: Resource) => void;
 }
 
-type TypeFilter = ResourceType | 'ALL';
-
 export function ResourceList({
   selectedResourceId,
   onSelect,
 }: ResourceListProps) {
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [filter, setFilter] = useState<TypeFilter>('ALL');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (type: TypeFilter): Promise<void> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      setResources(await fetchResources(type === 'ALL' ? undefined : type));
-    } catch (caught: unknown) {
-      const message =
-        caught instanceof ApiError
-          ? caught.message
-          : 'Could not load resources.';
-      setError(message);
-      setResources([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(filter);
-  }, [filter, load]);
+  const { resources, filter, isLoading, error, setFilter } = useResources();
 
   return (
     <section className={styles.section}>

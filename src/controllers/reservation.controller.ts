@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   cancelReservation,
   confirmReservation,
@@ -6,7 +6,7 @@ import {
   listActiveReservationsForUser,
 } from '../services/reservation.service.ts';
 import { ValidationError } from '../types/domain-error.ts';
-import type { Reservation, ReservationCreate } from '../types/reservation.ts';
+import type { Reservation, ReservationCreate } from '../../shared/contract.ts';
 
 /** Fields the contract allows in a ReservationCreate body. */
 const ALLOWED_FIELDS = ['resourceId', 'userId', 'startTime', 'endTime'];
@@ -78,54 +78,32 @@ function parseReservationCreate(payload: unknown): ReservationCreate {
 export async function handleCreateReservation(
   req: Request,
   res: Response<Reservation>,
-  next: NextFunction,
 ): Promise<void> {
-  try {
-    const input: ReservationCreate = parseReservationCreate(req.body);
-    res.status(201).json(await createReservation(input));
-  } catch (error: unknown) {
-    next(error);
-  }
+  const input: ReservationCreate = parseReservationCreate(req.body);
+  res.status(201).json(await createReservation(input));
 }
 
 export async function handleListUserReservations(
   req: Request<{ userId: string }>,
   res: Response<Reservation[]>,
-  next: NextFunction,
 ): Promise<void> {
-  try {
-    const { userId } = req.params;
-    if (userId.trim() === '') {
-      throw new ValidationError('userId must be a non-empty string.');
-    }
-    res.status(200).json(await listActiveReservationsForUser(userId));
-  } catch (error: unknown) {
-    next(error);
+  const { userId } = req.params;
+  if (userId.trim() === '') {
+    throw new ValidationError('userId must be a non-empty string.');
   }
+  res.status(200).json(await listActiveReservationsForUser(userId));
 }
 
 export async function handleCancelReservation(
   req: Request<{ reservationId: string }>,
   res: Response<Reservation>,
-  next: NextFunction,
 ): Promise<void> {
-  try {
-    const { reservationId } = req.params;
-    res.status(200).json(await cancelReservation(reservationId));
-  } catch (error: unknown) {
-    next(error);
-  }
+  res.status(200).json(await cancelReservation(req.params.reservationId));
 }
 
 export async function handleConfirmReservation(
   req: Request<{ reservationId: string }>,
   res: Response<Reservation>,
-  next: NextFunction,
 ): Promise<void> {
-  try {
-    const { reservationId } = req.params;
-    res.status(200).json(await confirmReservation(reservationId));
-  } catch (error: unknown) {
-    next(error);
-  }
+  res.status(200).json(await confirmReservation(req.params.reservationId));
 }

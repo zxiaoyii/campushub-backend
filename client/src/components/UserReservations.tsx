@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiError,
-  cancelReservation,
-  fetchUserReservations,
-} from '../api/campushubApi';
-import type { Reservation } from '../types/api';
+import type { Reservation } from '@contract';
+import { useUserReservations } from '../hooks/useReservations';
 import { ErrorBanner } from './ErrorBanner';
 import styles from './UserReservations.module.css';
 
@@ -23,52 +18,15 @@ export function UserReservations({
   userId,
   refreshToken,
 }: UserReservationsProps) {
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (): Promise<void> => {
-    if (userId.trim() === '') {
-      setReservations([]);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      setReservations(await fetchUserReservations(userId.trim()));
-    } catch (caught: unknown) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : 'Could not load your reservations.',
-      );
-      setReservations([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshToken]);
-
-  async function handleCancel(reservationId: string): Promise<void> {
-    setCancellingId(reservationId);
-    setError(null);
-    try {
-      await cancelReservation(reservationId);
-      await load();
-    } catch (caught: unknown) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : 'Could not cancel that reservation.',
-      );
-    } finally {
-      setCancellingId(null);
-    }
-  }
+  const {
+    reservations,
+    isLoading,
+    error,
+    cancellingId,
+    reload,
+    cancel,
+    dismissError,
+  } = useUserReservations(userId, refreshToken);
 
   return (
     <section className={styles.section}>
@@ -77,9 +35,7 @@ export function UserReservations({
         <button
           type="button"
           className={styles.refresh}
-          onClick={() => {
-            void load();
-          }}
+          onClick={reload}
           disabled={isLoading}
         >
           Refresh
@@ -87,12 +43,7 @@ export function UserReservations({
       </header>
 
       {error !== null && (
-        <ErrorBanner
-          message={error}
-          onDismiss={() => {
-            setError(null);
-          }}
-        />
+        <ErrorBanner message={error} onDismiss={dismissError} />
       )}
 
       {isLoading ? (
@@ -114,7 +65,7 @@ export function UserReservations({
                 className={styles.cancel}
                 disabled={cancellingId === reservation.id}
                 onClick={() => {
-                  void handleCancel(reservation.id);
+                  cancel(reservation.id);
                 }}
               >
                 {cancellingId === reservation.id ? 'Cancelling…' : 'Cancel'}

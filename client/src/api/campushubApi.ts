@@ -1,9 +1,9 @@
 import type {
-  CreateReservationDTO,
   ErrorResponse,
   Reservation,
+  ReservationCreate,
   Resource,
-} from '../types/api';
+} from '@contract';
 
 const BASE_URL = '/api/v1';
 
@@ -25,6 +25,19 @@ export class ApiError extends Error {
   get isConflict(): boolean {
     return this.status === 409;
   }
+}
+
+/**
+ * Turns anything thrown by this module into text a user can read. Every
+ * component used to repeat this instanceof check with its own wording.
+ */
+export function describeApiError(caught: unknown, fallback: string): string {
+  if (!(caught instanceof ApiError)) {
+    return fallback;
+  }
+  return caught.isConflict
+    ? `${caught.message} (${caught.code})`
+    : caught.message;
 }
 
 function isErrorResponse(value: unknown): value is ErrorResponse {
@@ -74,7 +87,7 @@ export function fetchResources(type?: string): Promise<Resource[]> {
 }
 
 export function createReservation(
-  payload: CreateReservationDTO,
+  payload: ReservationCreate,
 ): Promise<Reservation> {
   return request<Reservation>('/reservations', {
     method: 'POST',

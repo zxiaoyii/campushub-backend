@@ -1,7 +1,7 @@
 import express, { type Express } from 'express';
 import { connectDatabase } from './config/database.ts';
 import { appConfig } from './config/env.ts';
-import { errorHandler, notFoundHandler } from './middleware/error-handler.ts';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.ts';
 import { apiV1Router } from './routes/index.ts';
 
 /**
