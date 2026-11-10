@@ -23,5 +23,8 @@ npm-debug.log*
 # Client build output
 client/dist/
 
+# Coverage output
+coverage/
+
 # Local agent settings
 .claude/settings.local.json

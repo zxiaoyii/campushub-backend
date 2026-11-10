@@ -32,15 +32,17 @@ The server listens on <http://localhost:3000> and mounts every route under
 
 ## Scripts
 
-| Script                 | Purpose                                        |
-| ---------------------- | ---------------------------------------------- |
-| `npm run dev`          | Start with reload (Node runs the TS sources)   |
-| `npm run seed`         | Reset the resource catalogue in MongoDB        |
-| `npm run build`        | Compile `src/` to `dist/`                      |
-| `npm start`            | Run the compiled build                         |
-| `npm run typecheck`    | `tsc --noEmit`                                 |
-| `npm run lint`         | ESLint, including the architectural boundaries |
-| `npm run format:check` | Prettier check (`npm run format` to write)     |
+| Script                  | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `npm run dev`           | Start with reload (Node runs the TS sources)   |
+| `npm run seed`          | Reset the resource catalogue in MongoDB        |
+| `npm run build`         | Compile `src/` to `dist/`                      |
+| `npm start`             | Run the compiled build                         |
+| `npm run typecheck`     | `tsc --noEmit`                                 |
+| `npm run lint`          | ESLint, including the architectural boundaries |
+| `npm run format:check`  | Prettier check (`npm run format` to write)     |
+| `npm test`              | Jest suites against an in-memory MongoDB       |
+| `npm run test:coverage` | The same suites plus the coverage report       |
 
 ## Endpoints
 
@@ -62,7 +64,8 @@ while an empty value is a malformed request (`400`). `isAvailable` accepts
 only `true` or `false`.
 
 Cancelling a reservation frees its slot straight away, because the overlap
-check only counts PENDING and CONFIRMED rows.
+check only counts PENDING and CONFIRMED rows. `endTime` must be after
+`startTime`; a reversed or zero-length window is a `400`.
 
 Every error responds with the contract's flat shape:
 
@@ -102,6 +105,40 @@ curl -i http://localhost:3000/api/v1/reservations/user/user-456
 
 The seed loads four resources: two ROOM, one EQUIPMENT, and one LAB marked
 unavailable (booking it returns 409 RESOURCE_UNAVAILABLE).
+
+## Tests
+
+```bash
+npm test
+npm run test:coverage
+```
+
+Jest with ts-jest, Supertest for the endpoints, and `mongodb-memory-server`
+for persistence. No Docker and no `.env` are needed: `src/test/setup.ts`
+starts its own MongoDB in memory and connects Mongoose to it, so a test run
+cannot reach the development database. The first run downloads the MongoDB
+binary and takes longer than the rest.
+
+```
+src/services/__tests__/   Unit tests per service
+src/routes/__tests__/     Supertest integration tests per router
+src/test/                 In-memory database setup and fixtures
+```
+
+Coverage of `src/services/` and `src/controllers/` is held at 80% of
+statements and branches by `jest.config.ts`; the suites currently cover 100%
+of both.
+
+Two defects surfaced while writing them, both fixed:
+
+- Three concurrent requests for the same window were all accepted. The overlap
+  check is a read followed by a write, so a unique partial index on
+  `{ resourceId, startTime, endTime }` for active statuses now rejects the
+  duplicates, and the service reports the duplicate-key error as 409
+  `DOUBLE_BOOKING`. Partial overlaps that are not an exact match are still a
+  check-then-write and would need a transaction to close.
+- A syntactically broken request body was reported as `500`. The error
+  middleware now maps a 4xx from `express.json()` to a contract-shaped `400`.
 
 ## Validating the contract
 

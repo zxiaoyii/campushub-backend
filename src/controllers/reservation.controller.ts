@@ -60,18 +60,13 @@ function parseReservationCreate(payload: unknown): ReservationCreate {
     throw new ValidationError(`Unexpected property "${unknownField}".`);
   }
 
-  const startTime = requireIsoDateTime(body, 'startTime');
-  const endTime = requireIsoDateTime(body, 'endTime');
-
-  if (Date.parse(endTime) <= Date.parse(startTime)) {
-    throw new ValidationError('endTime must be after startTime.');
-  }
-
+  // Only the payload shape is checked here. Whether the window itself makes
+  // sense is a domain rule and belongs to the service (AGENTS.md §3).
   return {
     resourceId: requireString(body, 'resourceId'),
     userId: requireString(body, 'userId'),
-    startTime,
-    endTime,
+    startTime: requireIsoDateTime(body, 'startTime'),
+    endTime: requireIsoDateTime(body, 'endTime'),
   };
 }
 

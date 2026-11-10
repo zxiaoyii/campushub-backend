@@ -31,6 +31,18 @@ function toReservation(record: ReservationRecord): Reservation {
   };
 }
 
+/**
+ * Mongoose surfaces a unique-index violation as an error carrying code 11000.
+ * Checked structurally rather than by importing the driver's error class,
+ * which would pull the raw mongodb driver into the service layer.
+ */
+function isDuplicateKeyError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  return error.code === 11000;
+}
+
 export async function createReservation(
   input: ReservationCreate,
 ): Promise<Reservation> {
@@ -38,6 +50,19 @@ export async function createReservation(
     throw new ValidationError(
       'resourceId must be a valid resource identifier.',
     );
+  }
+
+  const startTime = new Date(input.startTime);
+  const endTime = new Date(input.endTime);
+
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    throw new ValidationError(
+      'startTime and endTime must be valid date-times.',
+    );
+  }
+
+  if (endTime.getTime() <= startTime.getTime()) {
+    throw new ValidationError('endTime must be after startTime.');
   }
 
   const resource = await ResourceModel.findById(input.resourceId).exec();
@@ -55,9 +80,6 @@ export async function createReservation(
     );
   }
 
-  const startTime = new Date(input.startTime);
-  const endTime = new Date(input.endTime);
-
   // Half-open intervals: a slot ending at 11:00 leaves 11:00 bookable.
   const clash = await ReservationModel.exists({
     resourceId: resource._id,
@@ -73,15 +95,26 @@ export async function createReservation(
     );
   }
 
-  const created = await ReservationModel.create({
-    resourceId: resource._id,
-    userId: input.userId,
-    startTime,
-    endTime,
-    status: 'PENDING',
-  });
-
-  return toReservation(created);
+  try {
+    const created = await ReservationModel.create({
+      resourceId: resource._id,
+      userId: input.userId,
+      startTime,
+      endTime,
+      status: 'PENDING',
+    });
+    return toReservation(created);
+  } catch (error: unknown) {
+    // Two concurrent requests for the same window both passed the check
+    // above; the unique index rejected this one.
+    if (isDuplicateKeyError(error)) {
+      throw new ConflictError(
+        'DOUBLE_BOOKING',
+        'Resource is already reserved for this time slot.',
+      );
+    }
+    throw error;
+  }
 }
 
 export async function listActiveReservationsForUser(

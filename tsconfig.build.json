@@ -1,0 +1,12 @@
+{
+  // Build config: the same options as tsconfig.json with the tests left out,
+  // so dist/ contains only what the server needs to run.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/test/**/*.ts",
+    "src/**/__tests__/**/*.ts",
+    "jest.config.ts"
+  ]
+}

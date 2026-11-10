@@ -29,15 +29,16 @@ institutions share one deployment; every tenant's data must stay isolated.
 The packages below are **pre-approved**: install them when a task genuinely
 needs them. Anything not in this table requires approval first.
 
-| Purpose  | Package                                                                                 |
-| -------- | --------------------------------------------------------------------------------------- |
-| Language | TypeScript (strict mode)                                                                |
-| Runtime  | Node.js >= 24.21.0                                                                      |
-| HTTP     | `express`                                                                               |
-| Database | `mongoose` (MongoDB)                                                                    |
-| Config   | `dotenv`                                                                                |
-| Types    | `@types/node`, `@types/express`                                                         |
-| Tooling  | `typescript` (6.x), `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier` |
+| Purpose  | Package                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------ |
+| Language | TypeScript (strict mode)                                                                   |
+| Runtime  | Node.js >= 24.21.0                                                                         |
+| HTTP     | `express`                                                                                  |
+| Database | `mongoose` (MongoDB)                                                                       |
+| Config   | `dotenv`                                                                                   |
+| Types    | `@types/node`, `@types/express`                                                            |
+| Tooling  | `typescript` (6.x), `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier`    |
+| Testing  | `jest`, `ts-jest`, `@types/jest`, `supertest`, `@types/supertest`, `mongodb-memory-server` |
 
 ### Forbidden
 
@@ -48,7 +49,7 @@ needs them. Anything not in this table requires approval first.
 - **No new dependency without explicit approval** — runtime _or_ dev. Do not
   add a package to `package.json` on your own initiative. Propose it, state
   what it replaces, and wait for an answer. This includes "obvious" ones
-  (lodash, axios, moment, nodemon, zod, jest).
+  (lodash, axios, moment, nodemon, zod, nock).
 - **No vendoring around the approval rule.** Copying a library's source into
   the repo, inlining it, or fetching it at runtime counts as adding a
   dependency and is equally forbidden.
@@ -116,6 +117,8 @@ src/
 ├── models/        Mongoose schemas + TypeScript interfaces ONLY
 ├── middleware/    Cross-cutting concerns (errorHandler.ts, auth, validation)
 ├── types/         Shared type definitions
+├── test/          Test harness: in-memory database setup, fixtures
+├── **/__tests__/  Test suites, beside the layer they cover
 ├── app.ts         Express assembly; bootstrapApp opens the DB connection
 ├── server.ts      Process bootstrap (listen, signals, shutdown)
 └── seed.ts        Resource catalogue loader (npm run seed)
@@ -334,7 +337,42 @@ generated file instead of the source it came from.
 
 ---
 
-## 8. Git & Commit Formatting
+## 8. Testing
+
+Jest with ts-jest, Supertest for the HTTP surface, and
+`mongodb-memory-server` for persistence. `npm test` runs the suites;
+`npm run test:coverage` adds the report.
+
+```
+src/test/setup.ts              In-memory MongoDB, wired in setupFilesAfterEnv
+src/test/factories.ts          Fixtures (seedResource, MISSING_OBJECT_ID)
+src/services/__tests__/        Unit tests, one file per service
+src/routes/__tests__/          Supertest integration tests, one per router
+```
+
+- **No mocked database.** Every test runs against a real MongoDB held in
+  memory, so index behaviour, casting and query semantics are exercised rather
+  than imagined. Mocking the model layer would make the suites agree with
+  whatever the code already does.
+- **The suites must not touch a real database.** `src/test/setup.ts` connects
+  Mongoose to the in-memory server itself and never reads `MONGODB_URI`.
+- **Collections are emptied between tests, not between files.** A suite that
+  depends on a leftover row passes for the wrong reason.
+- **Happy paths are the smaller half.** For each operation, assert the
+  boundaries too: exact matches, off-by-one-millisecond overlaps, reversed and
+  zero-length windows, malformed and well-formed-but-missing ids, and what
+  happens when two requests arrive at once.
+- **Assert the contract, not the implementation.** Integration tests check the
+  status code and the `{ code, message }` body from `docs/openapi.yaml`; unit
+  tests check the thrown domain error's `statusCode` and `code`.
+- Coverage of `src/services/` and `src/controllers/` stays at or above 80% of
+  statements and branches. `jest.config.ts` enforces it, so a drop fails the
+  run rather than a review.
+- A bug fix lands with the test that fails without it.
+
+---
+
+## 9. Git & Commit Formatting
 
 - Commit messages follow Conventional Commits:
   `feat|fix|chore|refactor|docs|test(scope): summary`
@@ -347,9 +385,10 @@ generated file instead of the source it came from.
 
 ---
 
-## 9. Definition of Done
+## 10. Definition of Done
 
-Run `npm run typecheck && npm run lint && npm run format:check` first. Most of
+Run `npm run typecheck && npm run lint && npm run format:check && npm test`
+first. Most of
 the rules above are machine-enforced by `eslint.config.mjs`, which cites the
 section it implements next to each rule — a passing lint run is evidence, not a
 substitute for reading this file. Suppressing a rule to make the run pass is
@@ -375,6 +414,8 @@ Then verify **all** of the following:
     checking does not catch unsupported runtime syntax (§2).
 12. `client/` still builds (`cd client && npm run build`) when `shared/` or any
     component changed.
+13. `npm test` passes and coverage of `services/` and `controllers/` is still
+    at or above the threshold in `jest.config.ts` (§8).
 
 If a rule was intentionally bent, say so explicitly in your response and
 explain why. Do not report success while a constraint is silently violated.
