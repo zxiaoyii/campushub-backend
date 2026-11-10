@@ -126,8 +126,27 @@ src/test/                 In-memory database setup and fixtures
 ```
 
 Coverage of `src/services/` and `src/controllers/` is held at 80% of
-statements and branches by `jest.config.ts`; the suites currently cover 100%
-of both.
+statements and branches by `jest.config.ts`, so a drop fails the run rather
+than a review. `npm run test:coverage` reports:
+
+```
+File                        | % Stmts | % Branch | % Funcs | % Lines
+----------------------------|---------|----------|---------|--------
+All files                   |     100 |     100  |     100 |     100
+ controllers                |     100 |     100  |     100 |     100
+  health.controller.ts      |     100 |     100  |     100 |     100
+  reservation.controller.ts |     100 |     100  |     100 |     100
+  resource.controller.ts    |     100 |     100  |     100 |     100
+ services                   |     100 |     100  |     100 |     100
+  health.service.ts         |     100 |     100  |     100 |     100
+  reservation.service.ts    |     100 |     100  |     100 |     100
+  resource.service.ts       |     100 |     100  |     100 |     100
+
+Test Suites: 4 passed, 4 total
+Tests:       81 passed, 81 total
+```
+
+The report itself is generated into `coverage/`, which is not committed.
 
 Two defects surfaced while writing them, both fixed:
 
