@@ -27,6 +27,9 @@ client/dist/
 coverage/
 
 # Auto-fix job scratch files (written in the runner, never committed)
+agent-prompt.md
+agent-system.md
+agent-response.md
 auto-heal-report.md
 pr-body.md
 

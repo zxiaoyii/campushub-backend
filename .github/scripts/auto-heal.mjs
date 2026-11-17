@@ -1,23 +1,27 @@
-// Auto-healing step for .github/workflows/ci.yml.
+// Auto-healing step for .github/workflows/ci.yml. Runs in two halves around
+// the model call, which the workflow delegates to actions/ai-inference.
 //
-// Reads the Jest failure log left behind by the `test` job, picks the source
-// files the log implicates, and asks a model on GitHub Models for corrected
-// versions of them. Whatever comes back is written to the working tree; the
-// workflow then re-runs lint, typecheck and the suite before opening a PR.
+//   prepare  Read the Jest failure log left behind by the `test` job, pick the
+//            source files it implicates, and write the system and user prompts
+//            to disk for the inference step.
+//   apply    Parse the model's reply and write the files it returned back into
+//            the working tree.
 //
-// The model may only rewrite files under src/. Test files, the shared
-// contract and anything outside src/ are sent as read-only context, so a
-// patch cannot "fix" the build by relaxing an assertion.
+// The model may only rewrite files under src/. Test files and anything outside
+// src/ are read-only context, so a patch cannot make the build green by
+// relaxing an assertion.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
-const ENDPOINT = 'https://models.github.ai/inference/chat/completions';
-const MODEL = process.env.AUTO_HEAL_MODEL ?? 'openai/gpt-4o';
 const LOG_PATH = process.env.AUTO_HEAL_LOG ?? 'test-results.log';
+const PROMPT_PATH = 'agent-prompt.md';
+const SYSTEM_PATH = 'agent-system.md';
+const RESPONSE_PATH = 'agent-response.md';
+const REPORT_PATH = 'auto-heal-report.md';
 
-// GitHub Models caps the request size on the free tier, so both the log and
-// the bundle of source files are trimmed before they are sent.
+// The free GitHub Models tier caps the request size, so both the log and the
+// bundle of source files are trimmed before they are sent.
 const LOG_BUDGET = 8_000;
 const SOURCE_BUDGET = 20_000;
 
@@ -44,29 +48,43 @@ function collectSources(root) {
 }
 
 /**
- * Keeps the parts of the log that name a failure. Jest prints the summary
- * first and the stack traces after, and the tail is what carries the detail.
+ * The part of the log that describes failures. Jest also prints console output
+ * from the suites that passed, and ranking against the whole log lets an
+ * unrelated file that happened to log something outrank the broken one.
  */
+function failureSection(log) {
+  const lines = log.split('\n');
+  const first = lines.findIndex((line) => line.trimStart().startsWith('●'));
+  const failures = first === -1 ? [] : lines.slice(first);
+  const headers = lines.filter((line) => line.startsWith('FAIL '));
+  return [...headers, ...failures].join('\n');
+}
+
+/** Keeps the tail of the log, which is where Jest puts the detail. */
 function trimLog(log) {
   if (log.length <= LOG_BUDGET) return log;
   return `...(earlier output omitted)...\n${log.slice(-LOG_BUDGET)}`;
 }
 
 /**
- * Orders source files by how strongly the log points at them: a direct mention
- * counts most, and a failing test file points at the module it is named after.
+ * Orders source files by how strongly the failures point at them: a path named
+ * in a stack trace counts most, then a failing test file named after the
+ * module, then a bare mention anywhere in the log.
  */
 function rankByRelevance(files, log) {
+  const focus = failureSection(log);
   const scored = files.map((path) => {
     const stem = basename(path, '.ts');
     let score = 0;
-    if (log.includes(path)) score += 100;
-    if (log.includes(`${stem}.test.ts`)) score += 50;
-    if (log.includes(stem)) score += 10;
+    if (focus.includes(path)) score += 200;
+    if (focus.includes(`${stem}.test.ts`)) score += 100;
+    if (focus.includes(stem)) score += 20;
+    if (log.includes(path)) score += 5;
     return { path, score };
   });
   scored.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-  return scored.filter((entry) => entry.score > 0).map((entry) => entry.path);
+  const relevant = scored.filter((entry) => entry.score > 0);
+  return (relevant.length > 0 ? relevant : scored).map((entry) => entry.path);
 }
 
 function renderBundle(files) {
@@ -77,6 +95,62 @@ function renderBundle(files) {
     bundle += block;
   }
   return bundle;
+}
+
+function prepare() {
+  let log;
+  try {
+    log = readFileSync(LOG_PATH, 'utf8');
+  } catch {
+    fail(`${LOG_PATH} is missing — the build failed before the tests ran.`);
+  }
+
+  const sources = collectSources('src');
+  const suspects = rankByRelevance(sources, log);
+  console.log(
+    `auto-heal: candidate files, most relevant first\n  ${suspects.join('\n  ')}`,
+  );
+
+  writeFileSync(
+    SYSTEM_PATH,
+    [
+      'You repair failing builds in a TypeScript Express API.',
+      'You return corrected source files and nothing outside the format you are given.',
+      'You never weaken a test, an assertion or a validation rule to make a build pass.',
+    ].join(' ') + '\n',
+  );
+
+  writeFileSync(
+    PROMPT_PATH,
+    `Parse the attached Jest failure log. Locate the source code causing the failure in src/ and generate a patch that fixes the bug without breaking existing tests.
+
+Rules:
+- Only files under src/ may be changed, and never a file under src/test/ or any __tests__/ directory. The tests describe the intended behaviour; the source is what is wrong.
+- Return the complete new content of each file you change. Do not return a diff, and do not elide anything with a comment such as "unchanged".
+- Change as little as possible. If one operator or one condition is wrong, fix that and leave the rest of the file identical.
+- Keep the existing style: explicit return types, no \`any\`, no new dependency, no suppression comment.
+
+Reply in exactly this format and add nothing else:
+
+### DIAGNOSIS
+<two sentences: what is broken, and why the tests fail>
+
+### FILE: <path from the repository root>
+\`\`\`ts
+<the complete corrected file>
+\`\`\`
+
+Repeat the FILE block once per file you change.
+
+--- JEST FAILURE LOG ---
+${trimLog(log)}
+
+--- SOURCE FILES ---
+${renderBundle(suspects)}
+`,
+  );
+
+  console.log(`auto-heal: wrote ${SYSTEM_PATH} and ${PROMPT_PATH}`);
 }
 
 /** Pulls `### FILE: <path>` blocks out of the model's reply. */
@@ -92,118 +166,54 @@ function parseDiagnosis(reply) {
   return match ? match[1].trim() : 'The agent returned no diagnosis.';
 }
 
-const token = process.env.GITHUB_TOKEN;
-if (!token) fail('GITHUB_TOKEN is not set.');
-
-let log;
-try {
-  log = readFileSync(LOG_PATH, 'utf8');
-} catch {
-  fail(`${LOG_PATH} is missing — the build failed before the tests ran.`);
-}
-
-const sources = collectSources('src');
-const suspects = rankByRelevance(sources, log);
-if (suspects.length === 0)
-  fail('No source file in src/ matches the failure log.');
-
-console.log(`auto-heal: model ${MODEL}`);
-console.log(`auto-heal: candidate files\n  ${suspects.join('\n  ')}`);
-
-const systemPrompt = [
-  'You repair failing builds in a TypeScript Express API.',
-  'You return corrected source files, never explanations outside the format you are given.',
-  'You never weaken a test, an assertion or a validation rule to make a build pass.',
-].join(' ');
-
-const userPrompt = `Parse the attached Jest failure log. Locate the source code causing the failure in src/ and generate a patch that fixes the bug without breaking existing tests.
-
-Rules:
-- Only files under src/ may be changed, and never a file under src/test/ or any __tests__/ directory. The tests describe the intended behaviour; the source is what is wrong.
-- Return the complete new content of each file you change. Do not return a diff and do not elide anything with comments such as "unchanged".
-- Change as little as possible. If one operator or one condition is wrong, fix that and leave the rest of the file byte-for-byte identical.
-- Keep the existing code style: explicit return types, no \`any\`, no new dependencies, no suppression comments.
-
-Reply in exactly this format:
-
-### DIAGNOSIS
-<two sentences: what is broken and why the tests fail>
-
-### FILE: <path from the repository root>
-\`\`\`ts
-<the complete corrected file>
-\`\`\`
-
-Repeat the FILE block for each file you change.
-
---- JEST FAILURE LOG ---
-${trimLog(log)}
-
---- SOURCE FILES ---
-${renderBundle(suspects)}
-`;
-
-const response = await fetch(ENDPOINT, {
-  method: 'POST',
-  headers: {
-    Accept: 'application/vnd.github+json',
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'X-GitHub-Api-Version': '2022-11-28',
-  },
-  body: JSON.stringify({
-    model: MODEL,
-    temperature: 0,
-    max_tokens: 4_000,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  }),
-});
-
-if (!response.ok) {
-  fail(`GitHub Models answered ${response.status}: ${await response.text()}`);
-}
-
-const payload = await response.json();
-const reply = payload?.choices?.[0]?.message?.content;
-if (typeof reply !== 'string' || reply.trim() === '') {
-  fail('GitHub Models returned an empty completion.');
-}
-
-const diagnosis = parseDiagnosis(reply);
-const patch = parsePatch(reply);
-if (patch.length === 0) {
-  fail(`The agent returned no file blocks. Raw reply:\n${reply}`);
-}
-
-const changed = [];
-for (const { path, content } of patch) {
-  if (
-    !path.startsWith('src/') ||
-    path.includes('__tests__') ||
-    path.startsWith('src/test/')
-  ) {
-    fail(`The agent tried to rewrite ${path}, which is out of bounds.`);
+function apply() {
+  let reply;
+  try {
+    reply = readFileSync(RESPONSE_PATH, 'utf8');
+  } catch {
+    fail(`${RESPONSE_PATH} is missing — the inference step produced nothing.`);
   }
-  if (!sources.includes(path)) {
-    fail(`The agent returned ${path}, which is not an existing source file.`);
+  if (reply.trim() === '') fail('The model returned an empty completion.');
+
+  const patch = parsePatch(reply);
+  if (patch.length === 0) {
+    fail(
+      `The agent returned no file blocks. Raw reply:\n${reply.slice(0, 4_000)}`,
+    );
   }
-  const before = readFileSync(path, 'utf8');
-  const after = content.endsWith('\n') ? content : `${content}\n`;
-  if (before === after) continue;
-  writeFileSync(path, after);
-  changed.push(path);
+
+  const sources = collectSources('src');
+  const changed = [];
+  for (const { path, content } of patch) {
+    if (
+      !path.startsWith('src/') ||
+      path.includes('__tests__') ||
+      path.startsWith('src/test/')
+    ) {
+      fail(`The agent tried to rewrite ${path}, which is out of bounds.`);
+    }
+    if (!sources.includes(path)) {
+      fail(`The agent returned ${path}, which is not an existing source file.`);
+    }
+    const before = readFileSync(path, 'utf8');
+    const after = content.endsWith('\n') ? content : `${content}\n`;
+    if (before === after) continue;
+    writeFileSync(path, after);
+    changed.push(path);
+  }
+
+  if (changed.length === 0) fail('The agent returned the files unchanged.');
+  console.log(`auto-heal: rewrote\n  ${changed.join('\n  ')}`);
+
+  writeFileSync(
+    REPORT_PATH,
+    `**Model:** \`${process.env.AUTO_HEAL_MODEL ?? 'unknown'}\` on GitHub Models\n\n` +
+      `**Files rewritten:** ${changed.map((path) => `\`${path}\``).join(', ')}\n\n` +
+      `### Agent diagnosis\n\n${parseDiagnosis(reply)}\n`,
+  );
 }
 
-if (changed.length === 0) fail('The agent returned the files unchanged.');
-
-console.log(`auto-heal: rewrote\n  ${changed.join('\n  ')}`);
-
-writeFileSync(
-  'auto-heal-report.md',
-  `**Model:** \`${MODEL}\` on GitHub Models\n\n` +
-    `**Files rewritten:** ${changed.map((path) => `\`${path}\``).join(', ')}\n\n` +
-    `### Agent diagnosis\n\n${diagnosis}\n`,
-);
+const mode = process.argv[2];
+if (mode === 'prepare') prepare();
+else if (mode === 'apply') apply();
+else fail(`Unknown mode "${mode ?? ''}". Use "prepare" or "apply".`);

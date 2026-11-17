@@ -56,6 +56,8 @@ jobs:
       contents: write
       pull-requests: write
       models: read
+    env:
+      AUTO_HEAL_MODEL: openai/gpt-4o
     steps:
       - uses: actions/checkout@v5
         with:
@@ -75,12 +77,36 @@ jobs:
         with:
           name: test-results
 
-      # Sends the failure log plus the source files it implicates to a model on
-      # GitHub Models, then writes back whatever files the model returns.
+      # Turns the failure log plus the source files it implicates into the two
+      # prompts the inference step sends.
+      - name: Build the agent prompt
+        run: |
+          node .github/scripts/auto-heal.mjs prepare
+          {
+            echo 'AGENT_SYSTEM<<AUTO_HEAL_EOF'
+            cat agent-system.md
+            echo 'AUTO_HEAL_EOF'
+            echo 'AGENT_PROMPT<<AUTO_HEAL_EOF'
+            cat agent-prompt.md
+            echo 'AUTO_HEAL_EOF'
+          } >> "$GITHUB_ENV"
+
       - name: Ask the agent for a patch
+        id: agent
+        uses: actions/ai-inference@v1
+        with:
+          model: ${{ env.AUTO_HEAL_MODEL }}
+          max-tokens: 4000
+          system-prompt: ${{ env.AGENT_SYSTEM }}
+          prompt: ${{ env.AGENT_PROMPT }}
+
+      # Writes back only the files the agent returned, and only under src/.
+      - name: Apply the patch
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node .github/scripts/auto-heal.mjs
+          AGENT_RESPONSE: ${{ steps.agent.outputs.response }}
+        run: |
+          printf '%s' "$AGENT_RESPONSE" > agent-response.md
+          node .github/scripts/auto-heal.mjs apply
 
       - name: Verify the patch
         id: verify
