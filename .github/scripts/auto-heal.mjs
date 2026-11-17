@@ -60,14 +60,21 @@ function collectSources(root) {
 
 /**
  * The part of the log that describes failures. Jest also prints console output
- * from the suites that passed, and ranking against the whole log lets an
- * unrelated file that happened to log something outrank the broken one.
+ * from the suites that passed, under the same `●` bullet, and ranking against
+ * the whole log lets an unrelated file that happened to log something outrank
+ * the broken one.
  */
 function failureSection(log) {
   const lines = log.split('\n');
-  const first = lines.findIndex((line) => line.trimStart().startsWith('●'));
-  const failures = first === -1 ? [] : lines.slice(first);
   const headers = lines.filter((line) => line.startsWith('FAIL '));
+  const first = lines.findIndex((line) => line.trimStart().startsWith('●'));
+  if (first === -1) return headers.join('\n');
+
+  const rest = lines.slice(first);
+  const end = rest.findIndex(
+    (line) => line.startsWith('PASS ') || line.startsWith('Test Suites:'),
+  );
+  const failures = end === -1 ? rest : rest.slice(0, end);
   return [...headers, ...failures].join('\n');
 }
 
@@ -143,10 +150,14 @@ ${renderBundle(suspects)}
  * a console API key goes on x-api-key.
  */
 function authHeaders() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // A secret pasted out of a wrapped terminal can carry newlines, which a
+  // header value may not contain. Neither credential has internal whitespace.
+  const clean = (value) => value?.replace(/\s+/g, '') ?? '';
+
+  const apiKey = clean(process.env.ANTHROPIC_API_KEY);
   if (apiKey) return { 'x-api-key': apiKey };
 
-  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  const oauthToken = clean(process.env.CLAUDE_CODE_OAUTH_TOKEN);
   if (oauthToken) {
     return {
       authorization: `Bearer ${oauthToken}`,
