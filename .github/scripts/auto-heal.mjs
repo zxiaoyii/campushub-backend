@@ -13,6 +13,7 @@
 // runs only on the CI runner, and the alternative is a dependency in
 // package.json that the application itself never imports.
 
+import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
@@ -148,25 +149,19 @@ ${renderBundle(suspects)}
 }
 
 /**
- * Either credential the Messages API accepts. A Claude subscription token from
- * `claude setup-token` goes on Authorization and needs the OAuth beta header;
- * a console API key goes on x-api-key.
+ * A subscription token from `claude setup-token` belongs to the Claude Code
+ * client, and the Messages API rate-limits it when a script calls the endpoint
+ * directly, so that credential runs the CLI instead. A console API key calls
+ * the endpoint.
  */
-function authHeaders() {
-  // A secret pasted out of a wrapped terminal can carry newlines, which a
-  // header value may not contain. Neither credential has internal whitespace.
+function transport() {
   const clean = (value) => value?.replace(/\s+/g, '') ?? '';
 
   const apiKey = clean(process.env.ANTHROPIC_API_KEY);
-  if (apiKey) return { 'x-api-key': apiKey };
+  if (apiKey) return { kind: 'api', apiKey };
 
   const oauthToken = clean(process.env.CLAUDE_CODE_OAUTH_TOKEN);
-  if (oauthToken) {
-    return {
-      authorization: `Bearer ${oauthToken}`,
-      'anthropic-beta': 'oauth-2025-04-20',
-    };
-  }
+  if (oauthToken) return { kind: 'cli', oauthToken };
 
   fail(
     'Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set. ' +
@@ -174,8 +169,27 @@ function authHeaders() {
   );
 }
 
-/** Sends the prompt to the Messages API and returns the assistant's text. */
-async function askClaude(prompt) {
+/** Runs `claude -p` with the prompt on stdin and returns what it printed. */
+function askViaCli(prompt, oauthToken) {
+  return new Promise((resolve) => {
+    const child = execFile(
+      'claude',
+      ['-p', '--model', MODEL, '--allowedTools', ''],
+      {
+        env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: oauthToken },
+        maxBuffer: 10 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) fail(`claude -p failed: ${error.message}\n${stderr}`);
+        resolve(stdout);
+      },
+    );
+    child.stdin.end(prompt);
+  });
+}
+
+/** Posts the prompt to the Messages API, retrying a 429 or 5xx. */
+async function askViaApi(prompt, apiKey) {
   const body = JSON.stringify({
     model: MODEL,
     max_tokens: 16_000,
@@ -188,7 +202,7 @@ async function askClaude(prompt) {
     response = await fetch(ENDPOINT, {
       method: 'POST',
       headers: {
-        ...authHeaders(),
+        'x-api-key': apiKey,
         'anthropic-version': API_VERSION,
         'content-type': 'application/json',
       },
@@ -215,20 +229,30 @@ async function askClaude(prompt) {
   }
 
   const payload = await response.json();
-  if (payload.stop_reason === 'refusal') {
+  if (payload.stop_reason === 'refusal')
     fail('The model declined the request.');
-  }
 
-  const text = (payload.content ?? [])
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
-
-  if (text.trim() === '') fail('The model returned an empty completion.');
   console.log(
     `auto-heal: ${payload.usage?.input_tokens ?? '?'} input and ` +
       `${payload.usage?.output_tokens ?? '?'} output tokens, stop reason ${payload.stop_reason}`,
   );
+
+  return (payload.content ?? [])
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+}
+
+async function askClaude(prompt) {
+  const route = transport();
+  console.log(`auto-heal: asking ${MODEL} via the ${route.kind}`);
+
+  const text =
+    route.kind === 'cli'
+      ? await askViaCli(`${SYSTEM_PROMPT}\n\n${prompt}`, route.oauthToken)
+      : await askViaApi(prompt, route.apiKey);
+
+  if (text.trim() === '') fail('The model returned an empty completion.');
   return text;
 }
 

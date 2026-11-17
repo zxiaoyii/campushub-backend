@@ -76,6 +76,11 @@ jobs:
         with:
           name: test-results
 
+      # The subscription-token route drives this CLI; the API-key route calls
+      # the endpoint directly and leaves it unused.
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       # Sends the failure log plus the source files it implicates to Claude and
       # writes back the files it returns, which are only ever under src/.
       - name: Ask the agent for a patch
