@@ -159,6 +159,27 @@ Two defects surfaced while writing them, both fixed:
 - A syntactically broken request body was reported as `500`. The error
   middleware now maps a 4xx from `express.json()` to a contract-shaped `400`.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and on pull requests into `main`.
+The `test` job installs with `npm ci`, then runs the linter, the typechecker
+and the Jest suite, keeping Jest's output in `test-results.log` and uploading
+it as an artifact.
+
+A second job, `auto-fix`, runs only when that job fails on a branch other than
+`main`. It downloads the log, and `.github/scripts/auto-heal.mjs` sends it to a
+model on GitHub Models together with the source files the log implicates. The
+model returns complete replacement files; the runner rejects any path outside
+`src/`, and any path under `src/test/` or a `__tests__/` directory, so a patch
+cannot make the build green by editing a test. Lint, typecheck and the suite
+are re-run on the patched tree, and `.github/scripts/open-fix-pr.sh` commits
+the result to `fix/auto-heal-<run id>` and opens a pull request carrying the
+agent's diagnosis, the verification result and a review checklist.
+
+The loop was exercised on `test/breaking-reservation-change`, where the
+overlap query's comparison operators are inverted so that non-overlapping
+bookings are reported as conflicts.
+
 ## Validating the contract
 
 ```bash
@@ -187,6 +208,9 @@ failure.
 ## Layout
 
 ```
+.github/
+├── workflows/ci.yml  Test job plus the conditional auto-healing job
+└── scripts/          The auto-fix runner and its pull-request step
 docs/openapi.yaml   Authoritative API contract
 shared/contract.ts  Types crossing the HTTP boundary, imported by both sides
 src/

@@ -26,5 +26,9 @@ client/dist/
 # Coverage output
 coverage/
 
+# Auto-fix job scratch files (written in the runner, never committed)
+auto-heal-report.md
+pr-body.md
+
 # Local agent settings
 .claude/settings.local.json

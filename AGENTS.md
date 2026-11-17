@@ -370,6 +370,22 @@ src/routes/__tests__/          Supertest integration tests, one per router
   run rather than a review.
 - A bug fix lands with the test that fails without it.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs lint, typecheck and `npm test` on every push
+and on pull requests into `main`. When that job fails on a branch other than
+`main`, the `auto-fix` job sends the Jest log and the implicated sources to a
+model on GitHub Models, applies the files it returns, re-runs the checks and
+opens a pull request.
+
+- The auto-fix runner may write only under `src/`, never `src/test/` or a
+  `__tests__/` directory. A green build bought by editing a test is not a fix.
+- An auto-generated patch is a proposal. It is reviewed by a person against
+  the checklist in its pull request description before it merges.
+- `.github/` is plain Node and shell glue outside the TypeScript project, so
+  ESLint ignores it. The rules in §4 still describe the intent: no silent
+  failure, no secret in a log line.
+
 ---
 
 ## 9. Git & Commit Formatting
@@ -416,6 +432,8 @@ Then verify **all** of the following:
     component changed.
 13. `npm test` passes and coverage of `services/` and `controllers/` is still
     at or above the threshold in `jest.config.ts` (§8).
+14. CI is green on the branch, and no auto-generated patch was merged without
+    a human review of its diff (§8).
 
 If a rule was intentionally bent, say so explicitly in your response and
 explain why. Do not report success while a constraint is silently violated.
