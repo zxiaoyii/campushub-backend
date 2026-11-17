@@ -56,7 +56,7 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      AUTO_HEAL_MODEL: claude-opus-5-5
+      AUTO_HEAL_MODEL: claude-haiku-5-5
     steps:
       - uses: actions/checkout@v5
         with:
