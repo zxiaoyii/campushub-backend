@@ -84,8 +84,8 @@ export async function createReservation(
   const clash = await ReservationModel.exists({
     resourceId: resource._id,
     status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
-    startTime: { $lt: endTime },
-    endTime: { $gt: startTime },
+    startTime: { $lte: endTime },
+    endTime: { $gte: startTime },
   }).exec();
 
   if (clash !== null) {
