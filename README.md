@@ -167,16 +167,21 @@ and the Jest suite, keeping Jest's output in `test-results.log` and uploading
 it as an artifact.
 
 A second job, `auto-fix`, runs only when that job fails on a branch other than
-`main`. It downloads the log and `.github/scripts/auto-heal.mjs prepare` turns
-it into a prompt, ranking the source files by how strongly the failure points
-at them. `actions/ai-inference` sends that prompt to a model on GitHub Models
-with the job's own token, and `auto-heal.mjs apply` writes back the complete
-replacement files the model returned. Any path outside `src/`, or under
+`main`. It downloads the log, and `.github/scripts/auto-heal.mjs` ranks the
+source files by how strongly the failure points at them, sends the log and
+those files to Claude through the Messages API, and writes back the complete
+replacement files the reply contains. Any path outside `src/`, or under
 `src/test/` or a `__tests__/` directory, is rejected, so a patch cannot make
 the build green by editing a test. Lint, typecheck and the suite are re-run on
 the patched tree, and `.github/scripts/open-fix-pr.sh` commits the result to
 `fix/auto-heal-<run id>` and opens a pull request carrying the agent's
 diagnosis, the verification result and a review checklist.
+
+The credential comes from a repository secret: `CLAUDE_CODE_OAUTH_TOKEN` (a
+subscription token from `claude setup-token`) or `ANTHROPIC_API_KEY`. The lab
+sheet suggests GitHub Models instead, which needs no secret, but its inference
+API was retired in July 2026 — `actions/ai-inference@v1` now receives a
+`text/plain` body of `OK`, and v3 dropped the provider.
 
 The loop was exercised on `test/breaking-reservation-change`, where the
 overlap query's comparison operators are inverted so that non-overlapping

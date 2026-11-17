@@ -374,9 +374,9 @@ src/routes/__tests__/          Supertest integration tests, one per router
 
 `.github/workflows/ci.yml` runs lint, typecheck and `npm test` on every push
 and on pull requests into `main`. When that job fails on a branch other than
-`main`, the `auto-fix` job sends the Jest log and the implicated sources to a
-model on GitHub Models, applies the files it returns, re-runs the checks and
-opens a pull request.
+`main`, the `auto-fix` job sends the Jest log and the implicated sources to
+Claude, applies the files it returns, re-runs the checks and opens a pull
+request.
 
 - The auto-fix runner may write only under `src/`, never `src/test/` or a
   `__tests__/` directory. A green build bought by editing a test is not a fix.

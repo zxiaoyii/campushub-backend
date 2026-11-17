@@ -1,24 +1,35 @@
-// Auto-healing step for .github/workflows/ci.yml. Runs in two halves around
-// the model call, which the workflow delegates to actions/ai-inference.
+// Auto-healing step for .github/workflows/ci.yml.
 //
-//   prepare  Read the Jest failure log left behind by the `test` job, pick the
-//            source files it implicates, and write the system and user prompts
-//            to disk for the inference step.
-//   apply    Parse the model's reply and write the files it returned back into
-//            the working tree.
+// Reads the Jest failure log left behind by the `test` job, picks the source
+// files it implicates, asks Claude for corrected versions of them, and writes
+// the reply back into the working tree. The workflow then re-runs lint,
+// typecheck and the suite before opening a pull request.
 //
 // The model may only rewrite files under src/. Test files and anything outside
 // src/ are read-only context, so a patch cannot make the build green by
 // relaxing an assertion.
+//
+// The call is plain HTTP rather than the Anthropic SDK on purpose: this script
+// runs only on the CI runner, and the alternative is a dependency in
+// package.json that the application itself never imports.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
+const ENDPOINT = 'https://api.anthropic.com/v1/messages';
+const API_VERSION = '2023-06-01';
+const MODEL = process.env.AUTO_HEAL_MODEL ?? 'claude-opus-5-5';
+
 const LOG_PATH = process.env.AUTO_HEAL_LOG ?? 'test-results.log';
 const PROMPT_PATH = 'agent-prompt.md';
-const SYSTEM_PATH = 'agent-system.md';
 const RESPONSE_PATH = 'agent-response.md';
 const REPORT_PATH = 'auto-heal-report.md';
+
+const SYSTEM_PROMPT = [
+  'You repair failing builds in a TypeScript Express API.',
+  'You return corrected source files and nothing outside the format you are given.',
+  'You never weaken a test, an assertion or a validation rule to make a build pass.',
+].join(' ');
 
 // The free GitHub Models tier caps the request size, so both the log and the
 // bundle of source files are trimmed before they are sent.
@@ -97,32 +108,8 @@ function renderBundle(files) {
   return bundle;
 }
 
-function prepare() {
-  let log;
-  try {
-    log = readFileSync(LOG_PATH, 'utf8');
-  } catch {
-    fail(`${LOG_PATH} is missing — the build failed before the tests ran.`);
-  }
-
-  const sources = collectSources('src');
-  const suspects = rankByRelevance(sources, log);
-  console.log(
-    `auto-heal: candidate files, most relevant first\n  ${suspects.join('\n  ')}`,
-  );
-
-  writeFileSync(
-    SYSTEM_PATH,
-    [
-      'You repair failing builds in a TypeScript Express API.',
-      'You return corrected source files and nothing outside the format you are given.',
-      'You never weaken a test, an assertion or a validation rule to make a build pass.',
-    ].join(' ') + '\n',
-  );
-
-  writeFileSync(
-    PROMPT_PATH,
-    `Parse the attached Jest failure log. Locate the source code causing the failure in src/ and generate a patch that fixes the bug without breaking existing tests.
+function buildPrompt(log, suspects) {
+  return `Parse the attached Jest failure log. Locate the source code causing the failure in src/ and generate a patch that fixes the bug without breaking existing tests.
 
 Rules:
 - Only files under src/ may be changed, and never a file under src/test/ or any __tests__/ directory. The tests describe the intended behaviour; the source is what is wrong.
@@ -147,10 +134,71 @@ ${trimLog(log)}
 
 --- SOURCE FILES ---
 ${renderBundle(suspects)}
-`,
-  );
+`;
+}
 
-  console.log(`auto-heal: wrote ${SYSTEM_PATH} and ${PROMPT_PATH}`);
+/**
+ * Either credential the Messages API accepts. A Claude subscription token from
+ * `claude setup-token` goes on Authorization and needs the OAuth beta header;
+ * a console API key goes on x-api-key.
+ */
+function authHeaders() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (apiKey) return { 'x-api-key': apiKey };
+
+  const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (oauthToken) {
+    return {
+      authorization: `Bearer ${oauthToken}`,
+      'anthropic-beta': 'oauth-2025-04-20',
+    };
+  }
+
+  fail(
+    'Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set. ' +
+      'Add one under Settings > Secrets and variables > Actions.',
+  );
+}
+
+/** Sends the prompt to the Messages API and returns the assistant's text. */
+async function askClaude(prompt) {
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(),
+      'anthropic-version': API_VERSION,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 16_000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    fail(
+      `The Messages API answered ${response.status}: ${await response.text()}`,
+    );
+  }
+
+  const payload = await response.json();
+  if (payload.stop_reason === 'refusal') {
+    fail('The model declined the request.');
+  }
+
+  const text = (payload.content ?? [])
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+
+  if (text.trim() === '') fail('The model returned an empty completion.');
+  console.log(
+    `auto-heal: ${payload.usage?.input_tokens ?? '?'} input and ` +
+      `${payload.usage?.output_tokens ?? '?'} output tokens, stop reason ${payload.stop_reason}`,
+  );
+  return text;
 }
 
 /** Pulls `### FILE: <path>` blocks out of the model's reply. */
@@ -166,15 +214,8 @@ function parseDiagnosis(reply) {
   return match ? match[1].trim() : 'The agent returned no diagnosis.';
 }
 
-function apply() {
-  let reply;
-  try {
-    reply = readFileSync(RESPONSE_PATH, 'utf8');
-  } catch {
-    fail(`${RESPONSE_PATH} is missing — the inference step produced nothing.`);
-  }
-  if (reply.trim() === '') fail('The model returned an empty completion.');
-
+/** Writes back the files the reply contains, refusing anything out of bounds. */
+function applyPatch(reply, sources) {
   const patch = parsePatch(reply);
   if (patch.length === 0) {
     fail(
@@ -182,7 +223,6 @@ function apply() {
     );
   }
 
-  const sources = collectSources('src');
   const changed = [];
   for (const { path, content } of patch) {
     if (
@@ -203,17 +243,35 @@ function apply() {
   }
 
   if (changed.length === 0) fail('The agent returned the files unchanged.');
-  console.log(`auto-heal: rewrote\n  ${changed.join('\n  ')}`);
-
-  writeFileSync(
-    REPORT_PATH,
-    `**Model:** \`${process.env.AUTO_HEAL_MODEL ?? 'unknown'}\` on GitHub Models\n\n` +
-      `**Files rewritten:** ${changed.map((path) => `\`${path}\``).join(', ')}\n\n` +
-      `### Agent diagnosis\n\n${parseDiagnosis(reply)}\n`,
-  );
+  return changed;
 }
 
-const mode = process.argv[2];
-if (mode === 'prepare') prepare();
-else if (mode === 'apply') apply();
-else fail(`Unknown mode "${mode ?? ''}". Use "prepare" or "apply".`);
+let log;
+try {
+  log = readFileSync(LOG_PATH, 'utf8');
+} catch {
+  fail(`${LOG_PATH} is missing — the build failed before the tests ran.`);
+}
+
+const sources = collectSources('src');
+const suspects = rankByRelevance(sources, log);
+console.log(`auto-heal: model ${MODEL}`);
+console.log(
+  `auto-heal: candidate files, most relevant first\n  ${suspects.join('\n  ')}`,
+);
+
+const prompt = buildPrompt(log, suspects);
+writeFileSync(PROMPT_PATH, prompt);
+
+const reply = await askClaude(prompt);
+writeFileSync(RESPONSE_PATH, reply);
+
+const changed = applyPatch(reply, sources);
+console.log(`auto-heal: rewrote\n  ${changed.join('\n  ')}`);
+
+writeFileSync(
+  REPORT_PATH,
+  `**Model:** \`${MODEL}\` via the Anthropic Messages API\n\n` +
+    `**Files rewritten:** ${changed.map((path) => `\`${path}\``).join(', ')}\n\n` +
+    `### Agent diagnosis\n\n${parseDiagnosis(reply)}\n`,
+);
