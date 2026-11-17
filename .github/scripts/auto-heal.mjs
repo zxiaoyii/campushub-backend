@@ -33,6 +33,9 @@ const SYSTEM_PROMPT = [
 
 // The free GitHub Models tier caps the request size, so both the log and the
 // bundle of source files are trimmed before they are sent.
+/** Backoff between retries of a 429 or 5xx, in milliseconds. */
+const RETRY_DELAYS = [15_000, 45_000, 90_000, 180_000];
+
 const LOG_BUDGET = 8_000;
 const SOURCE_BUDGET = 20_000;
 
@@ -59,23 +62,23 @@ function collectSources(root) {
 }
 
 /**
- * The part of the log that describes failures. Jest also prints console output
- * from the suites that passed, under the same `●` bullet, and ranking against
- * the whole log lets an unrelated file that happened to log something outrank
- * the broken one.
+ * The part of the log that describes failures. Jest bullets a passing suite's
+ * console output with the same `●`, and prints suites in whatever order they
+ * finish, so the scan tracks which suite header it is under and keeps only the
+ * blocks that belong to a failing one.
  */
 function failureSection(log) {
-  const lines = log.split('\n');
-  const headers = lines.filter((line) => line.startsWith('FAIL '));
-  const first = lines.findIndex((line) => line.trimStart().startsWith('●'));
-  if (first === -1) return headers.join('\n');
-
-  const rest = lines.slice(first);
-  const end = rest.findIndex(
-    (line) => line.startsWith('PASS ') || line.startsWith('Test Suites:'),
-  );
-  const failures = end === -1 ? rest : rest.slice(0, end);
-  return [...headers, ...failures].join('\n');
+  const kept = [];
+  let inFailure = false;
+  for (const line of log.split('\n')) {
+    if (line.startsWith('FAIL ')) {
+      inFailure = true;
+    } else if (line.startsWith('PASS ') || line.startsWith('Test Suites:')) {
+      inFailure = false;
+    }
+    if (inFailure) kept.push(line);
+  }
+  return kept.join('\n');
 }
 
 /** Keeps the tail of the log, which is where Jest puts the detail. */
@@ -173,25 +176,42 @@ function authHeaders() {
 
 /** Sends the prompt to the Messages API and returns the assistant's text. */
 async function askClaude(prompt) {
-  const response = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(),
-      'anthropic-version': API_VERSION,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 16_000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  const body = JSON.stringify({
+    model: MODEL,
+    max_tokens: 16_000,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
   });
 
-  if (!response.ok) {
-    fail(
-      `The Messages API answered ${response.status}: ${await response.text()}`,
+  let response;
+  for (let attempt = 1; ; attempt += 1) {
+    response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'anthropic-version': API_VERSION,
+        'content-type': 'application/json',
+      },
+      body,
+    });
+
+    if (response.ok) break;
+
+    const detail = await response.text();
+    const retryable = response.status === 429 || response.status >= 500;
+    if (!retryable || attempt > RETRY_DELAYS.length) {
+      fail(`The Messages API answered ${response.status}: ${detail}`);
+    }
+
+    const header = Number(response.headers.get('retry-after'));
+    const wait =
+      Number.isFinite(header) && header > 0
+        ? header * 1_000
+        : RETRY_DELAYS[attempt - 1];
+    console.log(
+      `auto-heal: ${response.status} on attempt ${attempt}, retrying in ${wait / 1_000}s`,
     );
+    await new Promise((resolve) => setTimeout(resolve, wait));
   }
 
   const payload = await response.json();
