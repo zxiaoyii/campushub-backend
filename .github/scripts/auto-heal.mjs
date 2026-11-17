@@ -34,6 +34,9 @@ const SYSTEM_PROMPT = [
 
 // The free GitHub Models tier caps the request size, so both the log and the
 // bundle of source files are trimmed before they are sent.
+/** Which credential answered, for the pull-request body. */
+let routeTaken = 'unknown';
+
 /** Backoff between retries of a 429 or 5xx, in milliseconds. */
 const RETRY_DELAYS = [15_000, 45_000, 90_000, 180_000];
 
@@ -245,6 +248,7 @@ async function askViaApi(prompt, apiKey) {
 
 async function askClaude(prompt) {
   const route = transport();
+  routeTaken = route.kind;
   console.log(`auto-heal: asking ${MODEL} via the ${route.kind}`);
 
   const text =
@@ -326,7 +330,7 @@ console.log(`auto-heal: rewrote\n  ${changed.join('\n  ')}`);
 
 writeFileSync(
   REPORT_PATH,
-  `**Model:** \`${MODEL}\` via the Anthropic Messages API\n\n` +
+  `**Model:** \`${MODEL}\`, reached through the ${routeTaken === 'cli' ? 'Claude Code CLI' : 'Anthropic Messages API'}\n\n` +
     `**Files rewritten:** ${changed.map((path) => `\`${path}\``).join(', ')}\n\n` +
     `### Agent diagnosis\n\n${parseDiagnosis(reply)}\n`,
 );
