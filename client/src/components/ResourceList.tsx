@@ -15,7 +15,7 @@ export function ResourceList({
   const { resources, filter, isLoading, error, setFilter } = useResources();
 
   return (
-    <section className={styles.section}>
+    <section className={styles.section} aria-label="Resources">
       <header className={styles.header}>
         <h2>Resources</h2>
         <div className={styles.filters}>

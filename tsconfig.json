@@ -31,6 +31,11 @@
     "declaration": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "shared/**/*.ts", "jest.config.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*.ts",
+    "shared/**/*.ts",
+    "jest.config.ts",
+    "playwright.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "e2e"]
 }

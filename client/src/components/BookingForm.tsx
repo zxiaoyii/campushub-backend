@@ -64,7 +64,7 @@ export function BookingForm({ resource, userId, onBooked }: BookingFormProps) {
   }
 
   return (
-    <section className={styles.section}>
+    <section className={styles.section} aria-label="Book a resource">
       <h2>Book a resource</h2>
 
       <p className={styles.target}>
@@ -80,7 +80,11 @@ export function BookingForm({ resource, userId, onBooked }: BookingFormProps) {
       {error !== null && (
         <ErrorBanner message={error} onDismiss={dismissError} />
       )}
-      {success !== null && <p className={styles.success}>{success}</p>}
+      {success !== null && (
+        <p className={styles.success} role="status">
+          {success}
+        </p>
+      )}
 
       <form
         className={styles.form}

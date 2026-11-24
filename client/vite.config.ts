@@ -1,9 +1,14 @@
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // The API is proxied in development so the browser sees one origin and the
 // backend needs no CORS setup.
+// The end-to-end run starts its own API on a throwaway port and points the
+// proxy at it with API_PROXY_TARGET; development keeps the default.
+const apiTarget = process.env['API_PROXY_TARGET'] ?? 'http://localhost:3000';
+
 export default defineConfig({
   plugins: [react()],
   // The contract types live in shared/ at the repository root, outside this
@@ -20,7 +25,7 @@ export default defineConfig({
     fs: { allow: ['..'] },
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

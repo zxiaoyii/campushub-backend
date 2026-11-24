@@ -150,6 +150,14 @@ export default tseslint.config(
     rules: { 'no-restricted-properties': 'off' },
   },
 
+  // e2e/support/ launches the stack the end-to-end suite runs against. It is a
+  // process launcher rather than application code, so composing an environment
+  // for a child process is its job, not a config-layer leak (AGENTS.md §4).
+  {
+    files: ['e2e/support/start-stack.ts'],
+    rules: { 'no-restricted-properties': 'off' },
+  },
+
   // server.ts logs startup/shutdown, the error middleware logs failures, and
   // the seed script's output is the point of running it.
   {

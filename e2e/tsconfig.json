@@ -1,0 +1,24 @@
+{
+  // The end-to-end suite is its own TypeScript project: it runs in Playwright,
+  // not in Node's ESM loader, and it must not widen the server's compiler
+  // options. The safety flags below mirror the root tsconfig.json.
+  "compilerOptions": {
+    "module": "node16",
+    "moduleResolution": "node16",
+    "allowImportingTsExtensions": true,
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

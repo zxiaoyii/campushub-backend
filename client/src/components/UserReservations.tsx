@@ -29,7 +29,7 @@ export function UserReservations({
   } = useUserReservations(userId, refreshToken);
 
   return (
-    <section className={styles.section}>
+    <section className={styles.section} aria-label="My bookings">
       <header className={styles.header}>
         <h2>My bookings</h2>
         <button
