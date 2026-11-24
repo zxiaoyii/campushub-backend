@@ -39,6 +39,7 @@ needs them. Anything not in this table requires approval first.
 | Types    | `@types/node`, `@types/express`                                                            |
 | Tooling  | `typescript` (6.x), `eslint`, `typescript-eslint`, `eslint-config-prettier`, `prettier`    |
 | Testing  | `jest`, `ts-jest`, `@types/jest`, `supertest`, `@types/supertest`, `mongodb-memory-server` |
+| E2E      | `@playwright/test`                                                                         |
 
 ### Forbidden
 
@@ -288,7 +289,9 @@ client/src/
   the backend imports too. A second copy of `Resource` or `Reservation` under
   `client/src/` is a bug waiting to drift.
 - The dev server proxies `/api` to `http://localhost:3000` (see
-  `vite.config.ts`), so the backend needs no CORS configuration.
+  `vite.config.ts`), so the backend needs no CORS configuration. The
+  end-to-end run overrides the target with `API_PROXY_TARGET`; nothing else
+  may read the environment here.
 
 ---
 
@@ -370,6 +373,35 @@ src/routes/__tests__/          Supertest integration tests, one per router
   run rather than a review.
 - A bug fix lands with the test that fails without it.
 
+### End-to-end tests
+
+Playwright drives the real client against the real API. `npm run test:e2e`
+runs the suite; `npm run test:e2e:ui` opens the inspector.
+
+```
+e2e/scenarios/reservation.feature  Gherkin acceptance criteria, written first
+e2e/reservation.spec.ts            One test per scenario, in the same order
+e2e/support/campushub.ts           The locators the specs are written in
+e2e/support/start-stack.ts         Ephemeral MongoDB, seed, API (webServer)
+```
+
+- **The feature file leads.** A scenario is written in Given/When/Then before
+  its spec, and the spec is a transcription of it. A test with no scenario
+  behind it is a test nobody agreed to.
+- **Locators are user-facing only** — `getByRole`, `getByLabel`, `getByText`.
+  No CSS class, no XPath, no `data-testid`: a class name is a styling decision
+  and a selector built on one breaks on a rename. When the DOM cannot be
+  addressed that way, add the semantic attribute (`aria-label`, `role`) to the
+  component rather than a test hook to the test.
+- **Panels are landmarks.** Each of the three sections carries an `aria-label`,
+  so a locator for "Cancel" or "Refresh" is scoped to the panel that owns it.
+- **The suite owns its data.** `start-stack.ts` boots a throwaway MongoDB on a
+  throwaway port and seeds the catalogue, so a run can neither read nor
+  overwrite the development database. Playwright never reuses a server.
+- **A scenario owns its student id and its hour.** One database serves the
+  whole run, so sharing either would make a conflict assertion pass for the
+  wrong reason.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs lint, typecheck and `npm test` on every push
@@ -434,6 +466,8 @@ Then verify **all** of the following:
     at or above the threshold in `jest.config.ts` (§8).
 14. CI is green on the branch, and no auto-generated patch was merged without
     a human review of its diff (§8).
+15. `npm run test:e2e` passes, and any new user journey has a scenario in
+    `e2e/scenarios/reservation.feature` before it has a spec (§8).
 
 If a rule was intentionally bent, say so explicitly in your response and
 explain why. Do not report success while a constraint is silently violated.

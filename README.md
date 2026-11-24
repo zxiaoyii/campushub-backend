@@ -43,6 +43,8 @@ The server listens on <http://localhost:3000> and mounts every route under
 | `npm run format:check`  | Prettier check (`npm run format` to write)     |
 | `npm test`              | Jest suites against an in-memory MongoDB       |
 | `npm run test:coverage` | The same suites plus the coverage report       |
+| `npm run test:e2e`      | Playwright journeys; starts its own stack      |
+| `npm run test:e2e:ui`   | The same journeys in the Playwright inspector  |
 
 ## Endpoints
 
@@ -159,6 +161,42 @@ Two defects surfaced while writing them, both fixed:
 - A syntactically broken request body was reported as `500`. The error
   middleware now maps a 4xx from `express.json()` to a contract-shaped `400`.
 
+## End-to-end tests
+
+```bash
+npx playwright install chromium firefox   # once, to fetch the browsers
+npm run test:e2e
+npm run test:e2e:ui                       # the same run, in the inspector
+```
+
+The acceptance criteria are written first, as Gherkin, in
+`e2e/scenarios/reservation.feature`; `e2e/reservation.spec.ts` is a
+transcription of them, one test per scenario:
+
+- a student filters by `ROOM`, picks Study Room 302 and books a free hour;
+- a second student is refused the same printer for the same hour with
+  `DOUBLE_BOOKING`, and gets no booking;
+- cancelling a booking frees the hour for someone else;
+- the unavailable Robotics Lab is listed but cannot be selected.
+
+`playwright.config.ts` starts both halves of the stack itself.
+`e2e/support/start-stack.ts` boots a throwaway MongoDB, runs the real seed
+script against it and starts `src/server.ts` on port 3100; the Vite dev server
+runs on 5174 with its `/api` proxy pointed at that API through
+`API_PROXY_TARGET`. Neither port is the development one, so a run is isolated
+from a stack you already have open and leaves no data behind.
+
+Locators are roles, labels and visible text, never CSS classes. Where the
+markup could not be addressed that way, the component gained the semantics
+rather than the test gaining a hook: the three panels carry an `aria-label`,
+which scopes a button named "Cancel" to the panel that owns it, and the
+booking confirmation is a `role="status"` live region.
+
+The run covers Chromium and Firefox. WebKit is left out: on macOS 14
+Playwright installs a "special" WebKit build whose remote protocol this
+version cannot drive, so the project would be red on the machine the suite was
+written on.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and on pull requests into `main`.
@@ -166,11 +204,11 @@ The `test` job installs with `npm ci`, then runs the linter, the typechecker
 and the Jest suite, keeping Jest's output in `test-results.log` and uploading
 it as an artifact.
 
-A second job, `auto-fix`, runs only when that job fails on a branch other than
-`main`. It downloads the log, and `.github/scripts/auto-heal.mjs` ranks the
-source files by how strongly the failure points at them, sends the log and
-those files to Claude through the Messages API, and writes back the complete
-replacement files the reply contains. Any path outside `src/`, or under
+A second job, `auto-fix`, runs only when that job fails on a branch other
+than `main`. It downloads the log, and `.github/scripts/auto-heal.mjs` ranks
+the source files by how strongly the failure points at them, sends the log and
+those files to Claude, and writes back the complete replacement files the
+reply contains. Any path outside `src/`, or under
 `src/test/` or a `__tests__/` directory, is rejected, so a patch cannot make
 the build green by editing a test. Lint, typecheck and the suite are re-run on
 the patched tree, and `.github/scripts/open-fix-pr.sh` commits the result to
@@ -224,6 +262,10 @@ failure.
 .github/
 ├── workflows/ci.yml  Test job plus the conditional auto-healing job
 └── scripts/          The auto-fix runner and its pull-request step
+e2e/
+├── scenarios/       Gherkin acceptance criteria
+├── reservation.spec.ts  The Playwright transcription of those scenarios
+└── support/         Shared locators and the throwaway stack launcher
 docs/openapi.yaml   Authoritative API contract
 shared/contract.ts  Types crossing the HTTP boundary, imported by both sides
 src/
